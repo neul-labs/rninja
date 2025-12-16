@@ -1,0 +1,50 @@
+[package]
+name = "rninja"
+version = "0.1.0"
+edition = "2021"
+description = "A drop-in replacement for Ninja with caching and improved scheduling"
+license = "MIT"
+repository = "https://github.com/user/rninja"
+keywords = ["build", "ninja", "cache", "compiler"]
+categories = ["development-tools::build-utils"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Serialization (cache scaffolding - Phase 1)
+sled = "0.34"
+rkyv = "0.8"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Async utilities
+futures = "0.3"
+
+# Utilities
+thiserror = "2"
+anyhow = "1"
+memmap2 = "0.9"
+blake3 = "1"
+parking_lot = "0.12"
+dashmap = "6"
+num_cpus = "1"
+
+[dev-dependencies]
+tempfile = "3"
+assert_cmd = "2"
+predicates = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[[bin]]
+name = "rninja"
+path = "src/main.rs"

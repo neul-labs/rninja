@@ -26,7 +26,7 @@ rninja addresses teams that already rely on Ninja-based build pipelines and want
 
 - async-nng demonstrates that the remote cache transport relies on a well-tested nanomsg successor, giving ops teams confidence in latency and throughput characteristics.
 - sled’s reputation as a crash-consistent embedded database reinforces reliability of local caching even under abrupt CI cancellations.
-- ryv’s content-addressed store model highlights deduplicated artifact storage, an attractive efficiency story for teams with expensive builds and large binary outputs.
+- rkyv’s content-addressed store model highlights deduplicated artifact storage, an attractive efficiency story for teams with expensive builds and large binary outputs.
 
 ## Success Signals
 

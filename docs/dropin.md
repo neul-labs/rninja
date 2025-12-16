@@ -26,7 +26,7 @@ rninja’s primary design goal is to replace the stock Ninja executable without 
 
 1. Install rninja alongside Ninja (`ninja.orig`) on developer workstations and CI agents.
 2. Run `rninja daemon status` (starts the daemon if needed) and confirm a single instance is serving the machine.
-3. Run `rninja -v` to verify version and build metadata; confirm async-nng, sled, and ryv features are compiled in.
+3. Run `rninja -v` to verify version and build metadata; confirm async-nng, sled, and rkyv features are compiled in.
 4. Execute `rninja -C out/Default -n all` (dry run) to ensure parsing of `build.ninja` succeeds.
 5. Perform side-by-side builds: `time ninja.orig target` vs `time rninja target`, comparing logs for unexpected differences.
 6. Enable local cache and confirm repeated builds rehydrate objects (check `rninja --stats` output).

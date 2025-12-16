@@ -23,7 +23,7 @@ Because rninja is a drop-in executor, all improvements must build on this alread
 ### Implementation Ingredients
 
 - `sled` keeps the cache index and dependency fingerprints durable with crash-safe transactions, so the executor can make instant reuse decisions even after abrupt stops.
-- `ryv` stores blob payloads (objects, archives, generated assets) in a deduplicated content-addressed form that sled and the scheduler can reference cheaply.
+- `rkyv` stores blob payloads (objects, archives, generated assets) in a deduplicated content-addressed form that sled and the scheduler can reference cheaply.
 - `async-nng` streams cache entries between peers or cache servers in parallel, ensuring remote fetch/push latency stays low enough to not bottleneck execution.
 
 ## Estimated Speedups

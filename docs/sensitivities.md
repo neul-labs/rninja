@@ -8,7 +8,7 @@ Adoption of rninja hinges on getting several engineering details right. This doc
 - **Cache correctness**: Content hashing must cover sources, headers, toolchain flags, and environment variables. Any omission risks stale or incorrect outputs, eroding trust quickly.
 - **Remote cache stability**: Network retries, authentication, and eviction policies must be robust; CI systems will not tolerate flaky cache servers.
 - **Exact Ninja semantics**: rninja must honor depfiles, `restat`, generator edges, and phony targets. Behavioral drift leads to subtle build breakages and blocks migration.
-- **Dependency alignment with async-nng/sled/ryv**: Each crate introduces expectations around threading, durability, and data formats. Upgrades or configuration mistakes can cascade into performance regressions if not validated.
+- **Dependency alignment with async-nng/sled/rkyv**: Each crate introduces expectations around threading, durability, and data formats. Upgrades or configuration mistakes can cascade into performance regressions if not validated.
 
 ## Product Sensitivities
 
@@ -21,6 +21,6 @@ Adoption of rninja hinges on getting several engineering details right. This doc
 - **Cache hit rate variance**: Teams with frequent sweeping changes (e.g., header churn) will see limited gains. Educating users on best practices (e.g., isolating unstable headers) increases success odds.
 - **Hardware diversity**: Mixed developer environments (Linux/macOS/Windows) require consistent hashing and artifact compatibility; otherwise caches fragment.
 - **Security posture**: Remote caches introduce authentication and artifact-signing requirements, especially inside enterprises with strict compliance norms.
-- **Third-party crate evolution**: async-nng, sled, and ryv each evolve at their own cadence. Pin versions, monitor upstream advisories, and plan migration stories to avoid sudden breaking changes or CVEs.
+- **Third-party crate evolution**: async-nng, sled, and rkyv each evolve at their own cadence. Pin versions, monitor upstream advisories, and plan migration stories to avoid sudden breaking changes or CVEs.
 
 By tracking these sensitivities alongside performance KPIs, rninja can stay aligned with user expectations and de-risk the product roadmap.

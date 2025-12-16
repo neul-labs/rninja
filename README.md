@@ -47,7 +47,13 @@ During evaluation, keep standard Ninja available (e.g., `ninja.orig`) to compare
 
 - **async-nng** powers the remote cache transport layer, giving rninja a high-throughput, async messaging fabric for publishing and fetching artifacts over NNG sockets.
 - **sled** acts as the embedded metadata/index database for the local content-addressed cache, enabling crash-safe tracking of digests, inputs, and compiler flags.
-- **ryv** stores the actual artifact payloads as a content-addressed object store, providing deduplicated blobs that sled and async-nng reference for local and remote reuse.
+- **rkyv** stores the actual artifact payloads as a content-addressed object store, providing deduplicated blobs that sled and async-nng reference for local and remote reuse.
+
+## Roadmap Highlights
+
+- **Phased delivery**: Phase 0 builds the daemon + compatibility layer, Phase 1 enables local caching, Phase 2 adds async-nng powered remote caches, and Phase 3 focuses on observability/hardening—each phase ships specific unit tests and documentation updates.
+- **Benchmark harness**: automated comparisons between rninja and stock Ninja (local and remote cache modes) keep performance goals measurable throughout the phases.
+- **Compatibility & test suites**: releases are gated by regression suites plus targeted unit/integration tests for daemon, cache, and remote transport behavior, guarding the drop-in guarantee.
 
 ## Additional Documentation
 
@@ -56,5 +62,6 @@ During evaluation, keep standard Ninja available (e.g., `ninja.orig`) to compare
 - `docs/sensitivities.md` — summarizes the key risks, engineering sensitivities, and success criteria for the project.
 - `docs/dropin.md` — explains CLI compatibility, configuration knobs, and validation checklists for swapping rninja in.
 - `docs/architecture.md` — describes the executor, cache, and transport components and how they preserve Ninja semantics.
+- `docs/roadmap.md` — details planned benchmarking and compatibility milestones.
 
 rninja is currently in the design/specification phase. Contributions, questions, or architectural discussions are welcome via issues and discussions.

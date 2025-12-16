@@ -1,6 +1,6 @@
 # Architecture Overview
 
-rninja is organized as a set of focused components that together replicate Ninja’s execution semantics while layering in caching and remote distribution powered by async-nng, sled, and ryv.
+rninja is organized as a set of focused components that together replicate Ninja’s execution semantics while layering in caching and remote distribution powered by async-nng, sled, and rkyv.
 
 ## Component Breakdown
 
@@ -16,8 +16,8 @@ rninja is organized as a set of focused components that together replicate Ninja
 - **Cache Index (sled)**  
   Stores records keyed by content digests: command line, inputs, environment, and metadata (timestamps, deps). sled’s crash-safe tree ensures rninja can resume after failures without corrupting the cache.
 
-- **Blob Store (ryv)**  
-  Holds actual build artifacts (object files, archives, generated assets) as deduplicated blobs referenced by the sled index. ryv’s content-addressing means identical outputs are stored once regardless of origin.
+- **Blob Store (rkyv)**  
+  Holds actual build artifacts (object files, archives, generated assets) as deduplicated blobs referenced by the sled index. rkyv’s content-addressing means identical outputs are stored once regardless of origin.
 
 - **Remote Transport (async-nng)**  
   Streams cache entries between machines using Nanomsg Next Gen sockets. async-nng provides async publish/subscribe and request/reply patterns, letting rninja push/fetch blobs without blocking the scheduler.
@@ -35,7 +35,7 @@ rninja is organized as a set of focused components that together replicate Ninja
 
 ```
 CLI request -> Daemon -> Scheduler -> Command execution
-                               |-> Cache lookup (sled index + ryv blobs)
+                               |-> Cache lookup (sled index + rkyv blobs)
                                |-> Remote fetch/push via async-nng
 ```
 
@@ -43,6 +43,6 @@ When a command is ready:
 
 1. Scheduler asks the cache index whether an equivalent result exists (hash computed from inputs/toolchain args).
 2. On hit, blob store provides the artifact, optionally fetched remotely through async-nng.
-3. On miss, rninja executes the action, writes outputs, updates the sled index, stores blobs in ryv, and propagates them via async-nng if remote caching is enabled.
+3. On miss, rninja executes the action, writes outputs, updates the sled index, stores blobs in rkyv, and propagates them via async-nng if remote caching is enabled.
 
 This architecture keeps rninja faithful to Ninja’s simplicity while leveraging modern Rust crates to extend performance and distribution capabilities.
