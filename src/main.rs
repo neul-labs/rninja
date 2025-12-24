@@ -62,6 +62,7 @@ fn run_build(cli: &Cli) -> Result<()> {
         keep_going: cli.keep_going,
         explain: cli.explain(),
         stats: cli.stats(),
+        cache_config: cache::CacheConfig::from_env(),
     });
 
     executor.run(&graph, &targets)?;
