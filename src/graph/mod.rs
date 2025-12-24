@@ -5,6 +5,16 @@ pub use node::Node;
 use crate::error::GraphError;
 use crate::parser::{Build, Manifest, Rule};
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
+
+/// Hash a command string for quick comparison
+#[inline]
+fn hash_command(cmd: &str) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    let mut hasher = DefaultHasher::new();
+    cmd.hash(&mut hasher);
+    hasher.finish()
+}
 
 /// The build graph - a DAG of nodes representing build targets
 #[derive(Debug)]
@@ -35,6 +45,9 @@ impl Graph {
             let command = graph.expand_command(build, rule);
             let description = graph.expand_description(build, rule);
 
+            // Pre-compute command hash for fast up-to-date checking
+            let command_hash = command.as_ref().map(|c| hash_command(c)).unwrap_or(0);
+
             for output in build.all_outputs() {
                 if graph.nodes.contains_key(output) {
                     return Err(GraphError::DuplicateOutput {
@@ -45,6 +58,7 @@ impl Graph {
                 let node = Node {
                     path: output.to_string(),
                     command: command.clone(),
+                    command_hash,
                     description: description.clone(),
                     deps: build.all_deps().map(|s| s.to_string()).collect(),
                     rule: build.rule.clone(),
@@ -123,6 +137,108 @@ impl Graph {
         }
 
         Ok(result)
+    }
+
+    /// Get topological order as paths (for compatibility)
+    pub fn topological_order(&self, targets: &[&str]) -> Result<Vec<String>, GraphError> {
+        let nodes = self.topo_order(targets)?;
+        Ok(nodes.iter().map(|n| n.path.clone()).collect())
+    }
+
+    /// Get all built outputs (non-source nodes)
+    pub fn outputs(&self) -> Vec<&str> {
+        self.nodes
+            .values()
+            .filter(|n| !n.is_source)
+            .map(|n| n.path.as_str())
+            .collect()
+    }
+
+    /// Find the shortest path between two nodes
+    pub fn find_path(&self, from: &str, to: &str) -> Option<Vec<String>> {
+        use std::collections::VecDeque;
+
+        let mut queue = VecDeque::new();
+        let mut visited = HashSet::new();
+        let mut parent: HashMap<String, String> = HashMap::new();
+
+        queue.push_back(from.to_string());
+        visited.insert(from.to_string());
+
+        while let Some(current) = queue.pop_front() {
+            if current == to {
+                // Reconstruct path
+                let mut path = vec![to.to_string()];
+                let mut node = to.to_string();
+                while let Some(p) = parent.get(&node) {
+                    path.push(p.clone());
+                    node = p.clone();
+                }
+                path.reverse();
+                return Some(path);
+            }
+
+            if let Some(n) = self.nodes.get(&current) {
+                for dep in &n.deps {
+                    if !visited.contains(dep) {
+                        visited.insert(dep.clone());
+                        parent.insert(dep.clone(), current.clone());
+                        queue.push_back(dep.clone());
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Generate GraphViz DOT format for targets
+    pub fn to_dot(&self, targets: &[&str]) -> String {
+        let mut lines = vec![
+            "digraph ninja {".to_string(),
+            "  rankdir=BT;".to_string(),
+            "  node [shape=box];".to_string(),
+        ];
+
+        // Collect all nodes reachable from targets
+        let mut to_visit: Vec<&str> = targets.to_vec();
+        let mut visited = HashSet::new();
+
+        while let Some(path) = to_visit.pop() {
+            if visited.contains(path) {
+                continue;
+            }
+            visited.insert(path.to_string());
+
+            if let Some(node) = self.nodes.get(path) {
+                let node_id = escape_dot_id(path);
+                let shape = if node.is_source { "ellipse" } else { "box" };
+                lines.push(format!("  {} [shape={}, label=\"{}\"];", node_id, shape, escape_dot_label(path)));
+
+                for dep in &node.deps {
+                    let dep_id = escape_dot_id(dep);
+                    lines.push(format!("  {} -> {};", dep_id, node_id));
+                    to_visit.push(dep);
+                }
+            }
+        }
+
+        lines.push("}".to_string());
+        lines.join("\n")
+    }
+
+    /// Get inputs for a target
+    pub fn inputs_for(&self, target: &str) -> Option<&Vec<String>> {
+        self.nodes.get(target).map(|n| &n.deps)
+    }
+
+    /// Get all outputs that depend on a given target
+    pub fn outputs_for(&self, target: &str) -> Vec<&str> {
+        self.nodes
+            .values()
+            .filter(|n| n.deps.contains(&target.to_string()))
+            .map(|n| n.path.as_str())
+            .collect()
     }
 
     fn topo_visit<'a>(
@@ -257,6 +373,14 @@ impl Graph {
 
         result
     }
+}
+
+fn escape_dot_id(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn escape_dot_label(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(test)]

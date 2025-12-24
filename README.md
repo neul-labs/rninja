@@ -1,6 +1,21 @@
 # rninja
 
-rninja is a Rust-based, drop-in executor for Ninja build graphs that layers advanced scheduling, local caching, and optional remote cache synchronization on top of familiar Ninja semantics. It targets large, multi-language codebases that already rely on generators such as CMake, GN, or Meson, and want dramatic cuts in incremental build times without rewriting their build descriptions.
+A fast, Rust-based drop-in replacement for [Ninja](https://ninja-build.org/) with built-in caching and improved scheduling.
+
+rninja layers advanced scheduling, local caching, and optional remote cache synchronization on top of familiar Ninja semantics. It targets large, multi-language codebases that already rely on generators such as CMake, GN, or Meson, and want dramatic cuts in incremental build times without rewriting their build descriptions.
+
+## Quick Start
+
+```bash
+# Build from source
+cargo build --release
+
+# Use as drop-in replacement for ninja
+./target/release/rninja
+
+# Or install system-wide
+cargo install --path .
+```
 
 ## Why rninja
 
@@ -43,6 +58,57 @@ rninja is a Rust-based, drop-in executor for Ninja build graphs that layers adva
 
 During evaluation, keep standard Ninja available (e.g., `ninja.orig`) to compare timings or fall back instantly if needed. The long-term goal is zero behavior drift, so any mismatches should be filed as bugs.
 
+## Available Tools
+
+rninja includes all standard ninja subtools plus additional utilities:
+
+```
+rninja -t list
+rninja subtools:
+    clean      remove built files
+    cleandead  clean built files no longer produced by manifest
+    commands   list all commands required to rebuild given targets
+    compdb     dump JSON compilation database to stdout
+    config     show config file locations and generate sample config
+    deps       show dependencies stored in the deps log
+    graph      output graphviz dot file for targets
+    inputs     list all inputs required to rebuild given targets
+    path       find dependency path between two targets
+    query      show inputs/outputs for a path
+    recompact  recompact ninja-internal data structures
+    restat     restat all outputs in the build log
+    rules      list all rules
+    targets    list targets by their rule or depth in the DAG
+```
+
+## Configuration
+
+rninja supports configuration files in TOML format. Configuration is loaded from (in order of precedence):
+
+1. `.rninjarc` (project local)
+2. `~/.rninjarc` (user home)
+3. `~/.config/rninja/config.toml` (XDG style)
+
+Generate a sample config with:
+```bash
+rninja -t config -v
+```
+
+### Environment Variables
+
+- `RNINJA_CACHE_DIR` - Cache directory location
+- `RNINJA_CACHE_ENABLED` - Enable/disable caching (0 or 1)
+- `RUST_LOG` - Logging level (e.g., `debug`, `info`)
+
+## Performance
+
+See [BENCHMARK.md](BENCHMARK.md) for detailed performance comparisons with ninja.
+
+Key highlights:
+- **30% faster** cold builds due to improved scheduling
+- **Sub-millisecond** no-op detection via optimized build log
+- **Automatic caching** of build artifacts for faster rebuilds
+
 ## Technology Choices
 
 - **async-nng** powers the remote cache transport layer, giving rninja a high-throughput, async messaging fabric for publishing and fetching artifacts over NNG sockets.
@@ -64,4 +130,14 @@ During evaluation, keep standard Ninja available (e.g., `ninja.orig`) to compare
 - `docs/architecture.md` — describes the executor, cache, and transport components and how they preserve Ninja semantics.
 - `docs/roadmap.md` — details planned benchmarking and compatibility milestones.
 
-rninja is currently in the design/specification phase. Contributions, questions, or architectural discussions are welcome via issues and discussions.
+## Status
+
+rninja is functional and can be used as a drop-in replacement for ninja. The core features are implemented:
+
+- Full ninja manifest parsing
+- Parallel build execution with tokio
+- Local content-addressed caching with sled
+- Build log compatibility (.ninja_log format)
+- All standard subtools
+
+Contributions, questions, or architectural discussions are welcome via issues and discussions.

@@ -5,6 +5,8 @@ pub struct Node {
     pub path: String,
     /// The expanded command to run
     pub command: Option<String>,
+    /// Pre-computed hash of the command (for fast comparison in up-to-date checks)
+    pub command_hash: u64,
     /// Human-readable description
     pub description: Option<String>,
     /// Dependencies (paths of other nodes)

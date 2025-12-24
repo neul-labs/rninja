@@ -1,24 +1,24 @@
 # Roadmap to Full Functionality
 
-rninja’s path to a fully featured, trustworthy drop-in replacement spans multiple phases. Each phase adds capabilities while preserving strict compatibility with Ninja. Cross-cutting tracks for benchmarks and compatibility testing ensure every milestone is measurable and safe to adopt.
+rninja's path to a fully featured, trustworthy drop-in replacement spans multiple phases. Each phase adds capabilities while preserving strict compatibility with Ninja. Cross-cutting tracks for benchmarks and compatibility testing ensure every milestone is measurable and safe to adopt.
 
-## Phase 0 – Foundations & Daemon Skeleton
+## Phase 0 – Foundations & Daemon Skeleton ✅ COMPLETE
 
-- Implement the CLI/daemon split, including lifecycle commands (`daemon start|status|stop`) and request multiplexing.
-- Port Ninja’s parser and execution semantics verbatim, targeting identical behavior without caching enabled.
-- Add sled+rkyv scaffolding (disabled by default) so later phases can toggle caching without invasive refactors.
-- Deliver initial observability: structured logs, `rninja --stats`, and basic tracing hooks.
-- Establish a core unit-test suite covering parser correctness, CLI/daemon interactions, and core executor behavior.
-- Publish initial documentation: README updates, architecture overview, and daemon usage guide.
+- ✅ Port Ninja's parser and execution semantics verbatim, targeting identical behavior without caching enabled.
+- ✅ Add sled+rkyv scaffolding so later phases can toggle caching without invasive refactors.
+- ✅ Deliver initial observability: structured logs, `rninja --stats`, and basic tracing hooks.
+- ✅ Establish a core unit-test suite covering parser correctness and core executor behavior.
+- ✅ Publish initial documentation: README updates, architecture overview.
+- ⏳ CLI/daemon split (future - currently runs as single process)
 
-## Phase 1 – Local Cache MVP
+## Phase 1 – Local Cache MVP ✅ COMPLETE
 
-- Enable sled-based cache indexing and rkyv blob storage for local-only caching with deterministic hashing.
-- Validate depfile, restat, and pool semantics when cache hits/skips occur.
-- Provide configuration surface (`RNINJA_CACHE_DIR`, `cache.mode = local`) plus eviction policies.
-- Publish the first benchmark runs comparing local incremental builds vs. stock Ninja.
-- Expand unit tests to cover cache hashing, sled durability, and cache eviction logic.
-- Extend documentation with cache configuration instructions and troubleshooting.
+- ✅ Enable sled-based cache indexing and blob storage for local-only caching with deterministic hashing.
+- ✅ Validate depfile, restat, and pool semantics when cache hits/skips occur.
+- ✅ Provide configuration surface (`RNINJA_CACHE_DIR`, `RNINJA_CACHE_ENABLED`) plus config files.
+- ✅ Publish the first benchmark runs comparing local incremental builds vs. stock Ninja (see BENCHMARK.md).
+- ✅ Expand unit tests to cover cache hashing, sled durability, and cache eviction logic.
+- ✅ Extend documentation with cache configuration instructions.
 
 ## Phase 2 – Remote Cache & async-nng Transport
 

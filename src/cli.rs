@@ -44,6 +44,10 @@ pub struct Cli {
     #[arg(short = 'w', long = "log", value_name = "FILE")]
     pub log: Option<String>,
 
+    /// Write Chrome trace output to FILE
+    #[arg(long = "trace", value_name = "FILE")]
+    pub trace: Option<String>,
+
     /// Targets to build
     #[arg(trailing_var_arg = true)]
     pub targets: Vec<String>,
