@@ -48,6 +48,10 @@ pub struct Cli {
     #[arg(long = "trace", value_name = "FILE")]
     pub trace: Option<String>,
 
+    /// Output in JSON format for machine consumption (AI agents, scripts)
+    #[arg(long = "json", alias = "machine")]
+    pub json: bool,
+
     /// Targets to build
     #[arg(trailing_var_arg = true)]
     pub targets: Vec<String>,

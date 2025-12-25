@@ -4,6 +4,7 @@ mod runner;
 use crate::cache::{Cache, CacheConfig, CacheEntry};
 use crate::error::ExecError;
 use crate::graph::{Graph, Node};
+use crate::output::{JsonEvent, OutputMode};
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -32,6 +33,8 @@ pub struct Config {
     pub stats: bool,
     /// Cache configuration
     pub cache_config: CacheConfig,
+    /// Output mode (human or JSON)
+    pub output_mode: OutputMode,
 }
 
 impl Default for Config {
@@ -44,6 +47,7 @@ impl Default for Config {
             explain: false,
             stats: false,
             cache_config: CacheConfig::from_env(),
+            output_mode: OutputMode::Human,
         }
     }
 }
@@ -61,24 +65,31 @@ pub struct Stats {
 }
 
 impl Stats {
-    pub fn print(&self) {
-        eprintln!();
-        eprintln!("build statistics:");
-        eprintln!("    started: {} edges", self.started);
-        eprintln!("   finished: {} edges", self.finished);
-        eprintln!("     failed: {} edges", self.failed);
-        eprintln!("    skipped: {} edges", self.skipped);
-        if self.cache_hits > 0 || self.cache_misses > 0 {
-            let total = self.cache_hits + self.cache_misses;
-            let hit_rate = if total > 0 {
-                100.0 * self.cache_hits as f64 / total as f64
-            } else {
-                0.0
-            };
-            eprintln!("  cache hit: {} ({:.1}%)", self.cache_hits, hit_rate);
-            eprintln!(" cache miss: {}", self.cache_misses);
+    pub fn print(&self, output_mode: OutputMode) {
+        match output_mode {
+            OutputMode::Human => {
+                eprintln!();
+                eprintln!("build statistics:");
+                eprintln!("    started: {} edges", self.started);
+                eprintln!("   finished: {} edges", self.finished);
+                eprintln!("     failed: {} edges", self.failed);
+                eprintln!("    skipped: {} edges", self.skipped);
+                if self.cache_hits > 0 || self.cache_misses > 0 {
+                    let total = self.cache_hits + self.cache_misses;
+                    let hit_rate = if total > 0 {
+                        100.0 * self.cache_hits as f64 / total as f64
+                    } else {
+                        0.0
+                    };
+                    eprintln!("  cache hit: {} ({:.1}%)", self.cache_hits, hit_rate);
+                    eprintln!(" cache miss: {}", self.cache_misses);
+                }
+                eprintln!("       time: {:.3}s", self.total_time.as_secs_f64());
+            }
+            OutputMode::Json => {
+                // JSON stats are included in BuildFinished event
+            }
         }
-        eprintln!("       time: {:.3}s", self.total_time.as_secs_f64());
     }
 }
 
@@ -104,10 +115,12 @@ struct BuildState {
     cache_hits: AtomicUsize,
     /// Cache misses counter
     cache_misses: AtomicUsize,
+    /// Output mode for progress reporting
+    output_mode: OutputMode,
 }
 
 impl BuildState {
-    fn new(parallelism: usize, total: usize, pools: &HashMap<String, usize>) -> Self {
+    fn new(parallelism: usize, total: usize, pools: &HashMap<String, usize>, output_mode: OutputMode) -> Self {
         let mut pool_sems = HashMap::new();
         for (name, depth) in pools {
             pool_sems.insert(name.clone(), Arc::new(Semaphore::new(*depth)));
@@ -124,6 +137,7 @@ impl BuildState {
             console_semaphore: Arc::new(Semaphore::new(1)),
             cache_hits: AtomicUsize::new(0),
             cache_misses: AtomicUsize::new(0),
+            output_mode,
         }
     }
 
@@ -241,7 +255,10 @@ impl Executor {
 
         let total = work.len();
         if total == 0 {
-            println!("ninja: no work to do.");
+            match self.config.output_mode {
+                OutputMode::Human => println!("ninja: no work to do."),
+                OutputMode::Json => JsonEvent::NoWorkToDo.emit(),
+            }
             return Ok(Stats {
                 total_time: start.elapsed(),
                 ..Default::default()
@@ -251,8 +268,16 @@ impl Executor {
         // Collect pool depths from graph
         let pools = graph.pool_depths();
 
+        // Emit build started event for JSON mode
+        if self.config.output_mode == OutputMode::Json {
+            JsonEvent::BuildStarted {
+                total_targets: total,
+                parallelism: self.config.parallelism,
+            }.emit();
+        }
+
         // Create shared state
-        let state = Arc::new(BuildState::new(self.config.parallelism, total, &pools));
+        let state = Arc::new(BuildState::new(self.config.parallelism, total, &pools, self.config.output_mode));
 
         // Execute nodes respecting dependencies
         let mut handles = Vec::new();
@@ -434,7 +459,19 @@ impl Executor {
         };
 
         if self.config.stats {
-            stats.print();
+            stats.print(self.config.output_mode);
+        }
+
+        // Emit build finished event for JSON mode
+        if self.config.output_mode == OutputMode::Json {
+            JsonEvent::BuildFinished {
+                success: fail_count == 0,
+                targets_built: finish_count,
+                targets_total: total,
+                duration_ms: stats.total_time.as_millis() as u64,
+                cache_hits: if cache_hits > 0 { Some(cache_hits) } else { None },
+                cache_misses: if cache_misses > 0 { Some(cache_misses) } else { None },
+            }.emit();
         }
 
         if fail_count > 0 {
@@ -498,11 +535,22 @@ async fn execute_node_async(
     };
 
     // Check if we have a cached result
-    if let Some(entry) = cached {
+    if let Some(_entry) = cached {
         // Restore from cache
-        let desc = description.unwrap_or("cached");
-        println!("[{}/{}] {} (cached)", idx, total, desc);
-        std::io::stdout().flush().ok();
+        match state.output_mode {
+            OutputMode::Human => {
+                let desc = description.unwrap_or("cached");
+                println!("[{}/{}] {} (cached)", idx, total, desc);
+                std::io::stdout().flush().ok();
+            }
+            OutputMode::Json => {
+                JsonEvent::CacheHit {
+                    target: path,
+                    index: idx,
+                    total,
+                }.emit();
+            }
+        }
 
         // For now, we trust the cache - the file should already exist from the blob restore
         // In a full implementation, we'd restore the blobs here
@@ -513,13 +561,25 @@ async fn execute_node_async(
     state.record_cache_miss();
 
     // Print status
-    let desc = description.unwrap_or(command);
-    if config.verbose {
-        println!("[{}/{}] {}", idx, total, command);
-    } else {
-        println!("[{}/{}] {}", idx, total, desc);
+    match state.output_mode {
+        OutputMode::Human => {
+            let desc = description.unwrap_or(command);
+            if config.verbose {
+                println!("[{}/{}] {}", idx, total, command);
+            } else {
+                println!("[{}/{}] {}", idx, total, desc);
+            }
+            std::io::stdout().flush().ok();
+        }
+        OutputMode::Json => {
+            JsonEvent::TargetStarted {
+                target: path,
+                index: idx,
+                total,
+                command: if config.verbose { Some(command) } else { None },
+            }.emit();
+        }
     }
-    std::io::stdout().flush().ok();
 
     // Dry run - don't actually execute
     if config.dry_run {
@@ -559,11 +619,33 @@ async fn execute_node_async(
     }
 
     if output.status.success() {
+        // Emit success event for JSON mode
+        if state.output_mode == OutputMode::Json {
+            JsonEvent::TargetFinished {
+                target: path,
+                index: idx,
+                total,
+                success: true,
+                error: None,
+            }.emit();
+        }
         Ok(true) // Command was executed
     } else {
+        let code = output.status.code().unwrap_or(-1);
+        // Emit failure event for JSON mode
+        if state.output_mode == OutputMode::Json {
+            let error_msg = format!("exit code {}", code);
+            JsonEvent::TargetFinished {
+                target: path,
+                index: idx,
+                total,
+                success: false,
+                error: Some(&error_msg),
+            }.emit();
+        }
         Err(ExecError::CommandFailed {
             command: command.to_string(),
-            code: output.status.code().unwrap_or(-1),
+            code,
         })
     }
 }

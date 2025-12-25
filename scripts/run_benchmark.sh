@@ -54,7 +54,7 @@ fi
 # Create benchmark project
 echo -e "${YELLOW}Generating benchmark project with $NUM_FILES files...${NC}"
 mkdir -p "$BENCH_DIR"
-python3 "$SCRIPT_DIR/gen_bench.py" "$NUM_FILES" "$BENCH_DIR"
+uv run "$SCRIPT_DIR/gen_bench.py" "$NUM_FILES" "$BENCH_DIR"
 cd "$BENCH_DIR"
 
 echo ""

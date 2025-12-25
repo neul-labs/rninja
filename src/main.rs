@@ -68,9 +68,20 @@ fn run_build(cli: &Cli) -> Result<()> {
     let mut mtime_cache = buildlog::MtimeCache::new();
 
     if buildlog::quick_uptodate_check(&graph, &targets, &log, &mut mtime_cache) {
-        println!("ninja: no work to do.");
+        if cli.json {
+            output::JsonEvent::NoWorkToDo.emit();
+        } else {
+            println!("ninja: no work to do.");
+        }
         return Ok(());
     }
+
+    // Determine output mode
+    let output_mode = if cli.json {
+        output::OutputMode::Json
+    } else {
+        output::OutputMode::Human
+    };
 
     // Create executor and run
     let executor = executor::Executor::new(executor::Config {
@@ -81,6 +92,7 @@ fn run_build(cli: &Cli) -> Result<()> {
         explain: cli.explain(),
         stats: cli.stats(),
         cache_config: cache::CacheConfig::from_env(),
+        output_mode,
     });
 
     executor.run(&graph, &targets)?;
