@@ -1,3 +1,4 @@
+mod admin;
 mod buildlog;
 mod cache;
 mod cli;
@@ -8,6 +9,7 @@ mod graph;
 mod metrics;
 mod output;
 mod parser;
+mod server;
 mod trace;
 
 use anyhow::Result;
@@ -93,6 +95,7 @@ fn run_build(cli: &Cli) -> Result<()> {
         stats: cli.stats(),
         cache_config: cache::CacheConfig::from_env(),
         output_mode,
+        trace_file: cli.trace.as_ref().map(std::path::PathBuf::from),
     });
 
     executor.run(&graph, &targets)?;
@@ -104,20 +107,44 @@ fn run_tool(tool: &str, cli: &Cli) -> Result<()> {
     match tool {
         "list" => {
             println!("rninja subtools:");
-            println!("    clean      remove built files");
-            println!("    cleandead  clean built files no longer produced by manifest");
-            println!("    commands   list all commands required to rebuild given targets");
-            println!("    compdb     dump JSON compilation database to stdout");
-            println!("    config     show config file locations and generate sample config");
-            println!("    deps       show dependencies stored in the deps log");
-            println!("    graph      output graphviz dot file for targets");
-            println!("    inputs     list all inputs required to rebuild given targets");
-            println!("    path       find dependency path between two targets");
-            println!("    query      show inputs/outputs for a path");
-            println!("    recompact  recompact ninja-internal data structures");
-            println!("    restat     restat all outputs in the build log");
-            println!("    rules      list all rules");
-            println!("    targets    list targets by their rule or depth in the DAG");
+            println!("    cache-gc     run cache garbage collection");
+            println!("    cache-health check cache health and integrity");
+            println!("    cache-stats  show cache statistics");
+            println!("    clean        remove built files");
+            println!("    cleandead    clean built files no longer produced by manifest");
+            println!("    commands     list all commands required to rebuild given targets");
+            println!("    compdb       dump JSON compilation database to stdout");
+            println!("    config       show config file locations and generate sample config");
+            println!("    deps         show dependencies stored in the deps log");
+            println!("    graph        output graphviz dot file for targets");
+            println!("    inputs       list all inputs required to rebuild given targets");
+            println!("    path         find dependency path between two targets");
+            println!("    query        show inputs/outputs for a path");
+            println!("    recompact    recompact ninja-internal data structures");
+            println!("    restat       restat all outputs in the build log");
+            println!("    rules        list all rules");
+            println!("    targets      list targets by their rule or depth in the DAG");
+        }
+        "cache-stats" => {
+            use crate::admin::run_cache_stats;
+            let json = cli.json;
+            run_cache_stats(cli.verbose, json)?;
+        }
+        "cache-gc" => {
+            use crate::admin::{run_cache_gc, GcOptions};
+            let max_age_days = cli.targets.first().and_then(|s| s.parse().ok());
+            let options = GcOptions {
+                dry_run: cli.dry_run,
+                max_age_days,
+                remove_orphans: true,
+                ..Default::default()
+            };
+            run_cache_gc(options, cli.verbose)?;
+        }
+        "cache-health" => {
+            use crate::admin::run_cache_health;
+            let json = cli.json;
+            run_cache_health(cli.verbose, json)?;
         }
         "clean" => {
             if let Some(dir) = &cli.dir {

@@ -52,6 +52,14 @@ pub struct Cli {
     #[arg(long = "json", alias = "machine")]
     pub json: bool,
 
+    /// Disable daemon mode (run in single-shot mode)
+    #[arg(long = "no-daemon")]
+    pub no_daemon: bool,
+
+    /// Custom daemon socket path
+    #[arg(long = "daemon-socket", value_name = "PATH")]
+    pub daemon_socket: Option<std::path::PathBuf>,
+
     /// Targets to build
     #[arg(trailing_var_arg = true)]
     pub targets: Vec<String>,

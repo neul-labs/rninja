@@ -5,10 +5,11 @@ use crate::cache::{Cache, CacheConfig, CacheEntry};
 use crate::error::ExecError;
 use crate::graph::{Graph, Node};
 use crate::output::{JsonEvent, OutputMode};
+use crate::trace::BuildTrace;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -35,6 +36,8 @@ pub struct Config {
     pub cache_config: CacheConfig,
     /// Output mode (human or JSON)
     pub output_mode: OutputMode,
+    /// Trace output file (None = disabled)
+    pub trace_file: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -48,6 +51,7 @@ impl Default for Config {
             stats: false,
             cache_config: CacheConfig::from_env(),
             output_mode: OutputMode::Human,
+            trace_file: None,
         }
     }
 }
@@ -117,10 +121,18 @@ struct BuildState {
     cache_misses: AtomicUsize,
     /// Output mode for progress reporting
     output_mode: OutputMode,
+    /// Build trace for chrome://tracing output
+    trace: Arc<BuildTrace>,
 }
 
 impl BuildState {
-    fn new(parallelism: usize, total: usize, pools: &HashMap<String, usize>, output_mode: OutputMode) -> Self {
+    fn new(
+        parallelism: usize,
+        total: usize,
+        pools: &HashMap<String, usize>,
+        output_mode: OutputMode,
+        trace: Arc<BuildTrace>,
+    ) -> Self {
         let mut pool_sems = HashMap::new();
         for (name, depth) in pools {
             pool_sems.insert(name.clone(), Arc::new(Semaphore::new(*depth)));
@@ -138,6 +150,7 @@ impl BuildState {
             cache_hits: AtomicUsize::new(0),
             cache_misses: AtomicUsize::new(0),
             output_mode,
+            trace,
         }
     }
 
@@ -180,6 +193,18 @@ impl BuildState {
 
     fn record_cache_miss(&self) {
         self.cache_misses.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn allocate_tid(&self) -> u32 {
+        self.trace.allocate_tid()
+    }
+
+    fn trace_begin(&self, target: &str, command: Option<&str>, tid: u32) -> u64 {
+        self.trace.begin_target(target, command, tid)
+    }
+
+    fn trace_complete(&self, target: &str, start_us: u64, duration_us: u64, tid: u32, command: Option<&str>, cache_hit: bool) {
+        self.trace.complete_target(target, start_us, duration_us, tid, command, cache_hit);
     }
 }
 
@@ -276,8 +301,18 @@ impl Executor {
             }.emit();
         }
 
+        // Create build trace (enabled if trace_file is set)
+        let trace = Arc::new(BuildTrace::new(self.config.trace_file.is_some()));
+        trace.add_metadata("process_name", "rninja");
+
         // Create shared state
-        let state = Arc::new(BuildState::new(self.config.parallelism, total, &pools, self.config.output_mode));
+        let state = Arc::new(BuildState::new(
+            self.config.parallelism,
+            total,
+            &pools,
+            self.config.output_mode,
+            trace.clone(),
+        ));
 
         // Execute nodes respecting dependencies
         let mut handles = Vec::new();
@@ -350,6 +385,11 @@ impl Executor {
                     let sem = state.get_pool_semaphore(pool.as_deref());
                     let _permit = sem.acquire().await.unwrap();
 
+                    // Allocate thread ID for tracing
+                    let tid = state.allocate_tid();
+                    let trace_start = state.trace.timestamp();
+                    let exec_start = Instant::now();
+
                     let result = execute_node_async(
                         &path,
                         command.as_deref(),
@@ -365,6 +405,11 @@ impl Executor {
                         &state,
                     )
                     .await;
+
+                    // Record trace event
+                    let duration_us = exec_start.elapsed().as_micros() as u64;
+                    let cache_hit = cached_entry.is_some();
+                    state.trace_complete(&path, trace_start, duration_us, tid, command.as_deref(), cache_hit);
 
                     match result {
                         Ok(executed) => {
@@ -472,6 +517,15 @@ impl Executor {
                 cache_hits: if cache_hits > 0 { Some(cache_hits) } else { None },
                 cache_misses: if cache_misses > 0 { Some(cache_misses) } else { None },
             }.emit();
+        }
+
+        // Write trace file if configured
+        if let Some(ref trace_path) = self.config.trace_file {
+            if let Err(e) = trace.write_to_file(trace_path) {
+                eprintln!("Warning: failed to write trace file: {}", e);
+            } else {
+                info!("Trace written to {}", trace_path.display());
+            }
         }
 
         if fail_count > 0 {

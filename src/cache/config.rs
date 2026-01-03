@@ -1,26 +1,198 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+/// Cache operation mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CacheMode {
+    /// Local cache only
+    #[default]
+    Local,
+    /// Remote cache only (fail if unavailable)
+    Remote,
+    /// Try remote first, fall back to local
+    Auto,
+}
+
+impl CacheMode {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "local" => Some(CacheMode::Local),
+            "remote" => Some(CacheMode::Remote),
+            "auto" => Some(CacheMode::Auto),
+            _ => None,
+        }
+    }
+}
+
+/// Push policy for remote cache
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum PushPolicy {
+    /// Never push to remote
+    Never,
+    /// Push only successful builds (default)
+    #[default]
+    OnSuccess,
+    /// Push all builds
+    Always,
+}
+
+impl PushPolicy {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "never" => Some(PushPolicy::Never),
+            "on_success" | "onsuccess" => Some(PushPolicy::OnSuccess),
+            "always" => Some(PushPolicy::Always),
+            _ => None,
+        }
+    }
+}
+
+/// Pull policy for remote cache
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum PullPolicy {
+    /// Always try remote first (default)
+    #[default]
+    Always,
+    /// Only pull if local miss
+    OnMiss,
+    /// Never pull (push-only mode)
+    Never,
+}
+
+impl PullPolicy {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "always" => Some(PullPolicy::Always),
+            "on_miss" | "onmiss" => Some(PullPolicy::OnMiss),
+            "never" => Some(PullPolicy::Never),
+            _ => None,
+        }
+    }
+}
+
+/// Remote cache configuration
+#[derive(Debug, Clone)]
+pub struct RemoteCacheConfig {
+    /// Server address (e.g., "tcp://cache.example.com:9999")
+    pub server_addr: String,
+    /// Authentication token
+    pub token: String,
+    /// Connection timeout
+    pub connect_timeout: Duration,
+    /// Request timeout
+    pub request_timeout: Duration,
+    /// Push policy
+    pub push_policy: PushPolicy,
+    /// Pull policy
+    pub pull_policy: PullPolicy,
+    /// Maximum concurrent remote operations
+    pub max_concurrent: usize,
+    /// Maximum retries for transient failures
+    pub max_retries: u32,
+    /// Initial backoff for retries
+    pub initial_backoff: Duration,
+    /// Maximum backoff for retries
+    pub max_backoff: Duration,
+}
+
+impl Default for RemoteCacheConfig {
+    fn default() -> Self {
+        Self {
+            server_addr: String::new(),
+            token: String::new(),
+            connect_timeout: Duration::from_secs(5),
+            request_timeout: Duration::from_secs(30),
+            push_policy: PushPolicy::default(),
+            pull_policy: PullPolicy::default(),
+            max_concurrent: 4,
+            max_retries: 3,
+            initial_backoff: Duration::from_millis(100),
+            max_backoff: Duration::from_secs(5),
+        }
+    }
+}
+
+impl RemoteCacheConfig {
+    /// Check if remote cache is configured
+    pub fn is_configured(&self) -> bool {
+        !self.server_addr.is_empty() && !self.token.is_empty()
+    }
+
+    /// Create from environment variables
+    pub fn from_env() -> Self {
+        let mut config = Self::default();
+
+        if let Ok(server) = std::env::var("RNINJA_CACHE_REMOTE_SERVER") {
+            config.server_addr = server;
+        }
+
+        if let Ok(token) = std::env::var("RNINJA_CACHE_TOKEN") {
+            config.token = token;
+        }
+
+        if let Ok(val) = std::env::var("RNINJA_CACHE_PUSH_POLICY") {
+            if let Some(policy) = PushPolicy::from_str(&val) {
+                config.push_policy = policy;
+            }
+        }
+
+        if let Ok(val) = std::env::var("RNINJA_CACHE_PULL_POLICY") {
+            if let Some(policy) = PullPolicy::from_str(&val) {
+                config.pull_policy = policy;
+            }
+        }
+
+        if let Ok(val) = std::env::var("RNINJA_CACHE_CONNECT_TIMEOUT") {
+            if let Ok(secs) = val.parse::<u64>() {
+                config.connect_timeout = Duration::from_secs(secs);
+            }
+        }
+
+        if let Ok(val) = std::env::var("RNINJA_CACHE_REQUEST_TIMEOUT") {
+            if let Ok(secs) = val.parse::<u64>() {
+                config.request_timeout = Duration::from_secs(secs);
+            }
+        }
+
+        if let Ok(val) = std::env::var("RNINJA_CACHE_MAX_CONCURRENT") {
+            if let Ok(n) = val.parse::<usize>() {
+                config.max_concurrent = n;
+            }
+        }
+
+        config
+    }
+}
+
 /// Cache configuration
 #[derive(Debug, Clone)]
 pub struct CacheConfig {
     /// Whether caching is enabled
     pub enabled: bool,
+    /// Cache mode (local, remote, auto)
+    pub mode: CacheMode,
     /// Cache directory path
     pub cache_dir: PathBuf,
     /// Maximum age for cache entries (None = no expiry)
     pub max_age: Option<Duration>,
     /// Maximum cache size in bytes (None = no limit)
     pub max_size: Option<u64>,
+    /// Remote cache configuration
+    pub remote: RemoteCacheConfig,
+    /// Auto-migrate cache schema if needed
+    pub auto_migrate: bool,
 }
 
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            mode: CacheMode::default(),
             cache_dir: default_cache_dir(),
             max_age: None,
             max_size: None,
+            remote: RemoteCacheConfig::default(),
+            auto_migrate: true,
         }
     }
 }
@@ -54,6 +226,22 @@ impl CacheConfig {
             }
         }
 
+        // RNINJA_CACHE_MODE - cache mode (local, remote, auto)
+        if let Ok(val) = std::env::var("RNINJA_CACHE_MODE") {
+            if let Some(mode) = CacheMode::from_str(&val) {
+                config.mode = mode;
+            }
+        }
+
+        // Load remote config from environment
+        config.remote = RemoteCacheConfig::from_env();
+
+        // Auto-detect mode based on remote config
+        if config.remote.is_configured() && config.mode == CacheMode::Local {
+            // If remote is configured but mode is still local, upgrade to auto
+            config.mode = CacheMode::Auto;
+        }
+
         config
     }
 
@@ -63,6 +251,11 @@ impl CacheConfig {
             enabled: false,
             ..Self::default()
         }
+    }
+
+    /// Check if remote cache is available
+    pub fn has_remote(&self) -> bool {
+        self.remote.is_configured() && self.mode != CacheMode::Local
     }
 }
 

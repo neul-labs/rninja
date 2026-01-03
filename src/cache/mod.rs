@@ -2,16 +2,20 @@ mod blob;
 mod config;
 mod entry;
 mod hasher;
+pub mod remote;
+pub mod schema;
 
-pub use config::CacheConfig;
+pub use blob::BlobStore;
+pub use schema::{check_and_migrate, SchemaInfo, CURRENT_SCHEMA_VERSION};
+pub use config::{CacheConfig, CacheMode, PullPolicy, PushPolicy, RemoteCacheConfig};
 pub use entry::CacheEntry;
+pub use remote::{RemoteCacheClient, RemoteCacheError, RemoteClientConfig, WireCacheEntry};
 
 use crate::error::ExecError;
-use blob::BlobStore;
 use parking_lot::RwLock;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 use tracing::{debug, info, warn};
 
 /// Cache statistics
@@ -21,6 +25,11 @@ pub struct CacheStats {
     pub misses: usize,
     pub stores: usize,
     pub errors: usize,
+    // Remote cache stats
+    pub remote_hits: usize,
+    pub remote_misses: usize,
+    pub remote_errors: usize,
+    pub remote_timeouts: usize,
 }
 
 impl CacheStats {
@@ -32,9 +41,26 @@ impl CacheStats {
             self.hits as f64 / total as f64
         }
     }
+
+    pub fn total_hits(&self) -> usize {
+        self.hits + self.remote_hits
+    }
+
+    pub fn total_misses(&self) -> usize {
+        self.misses + self.remote_misses
+    }
+
+    pub fn combined_hit_rate(&self) -> f64 {
+        let total = self.total_hits() + self.total_misses();
+        if total == 0 {
+            0.0
+        } else {
+            self.total_hits() as f64 / total as f64
+        }
+    }
 }
 
-/// The local build cache
+/// The build cache (local + optional remote)
 pub struct Cache {
     /// Configuration
     config: CacheConfig,
@@ -44,6 +70,8 @@ pub struct Cache {
     blobs: BlobStore,
     /// Statistics
     stats: RwLock<CacheStats>,
+    /// Remote cache client (if configured)
+    remote: Option<RemoteCacheClient>,
 }
 
 impl Cache {
@@ -68,14 +96,72 @@ impl Cache {
         let blobs_path = cache_dir.join("blobs");
         let blobs = BlobStore::open(&blobs_path)?;
 
-        info!("Cache opened at {}", cache_dir.display());
+        // Create remote client if configured
+        let remote = if config.has_remote() {
+            let remote_config = RemoteClientConfig {
+                server_addr: config.remote.server_addr.clone(),
+                token: config.remote.token.clone(),
+                client_id: None,
+                connect_timeout: config.remote.connect_timeout,
+                request_timeout: config.remote.request_timeout,
+                max_concurrent: config.remote.max_concurrent,
+                chunk_size: remote::protocol::DEFAULT_CHUNK_SIZE,
+                retry: remote::RetryConfig {
+                    max_retries: config.remote.max_retries,
+                    initial_backoff: config.remote.initial_backoff,
+                    max_backoff: config.remote.max_backoff,
+                },
+            };
+
+            match RemoteCacheClient::new(remote_config) {
+                Ok(client) => {
+                    info!(
+                        "Remote cache configured: {}",
+                        config.remote.server_addr
+                    );
+                    Some(client)
+                }
+                Err(e) => {
+                    warn!("Failed to create remote cache client: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        info!(
+            "Cache opened at {} (mode: {:?})",
+            cache_dir.display(),
+            config.mode
+        );
 
         Ok(Self {
             config,
             db,
             blobs,
             stats: RwLock::new(CacheStats::default()),
+            remote,
         })
+    }
+
+    /// Get the cache mode
+    pub fn mode(&self) -> CacheMode {
+        self.config.mode
+    }
+
+    /// Check if remote cache is connected
+    pub fn has_remote(&self) -> bool {
+        self.remote.as_ref().map(|r| r.is_connected()).unwrap_or(false)
+    }
+
+    /// Connect to remote cache (if configured)
+    pub async fn connect_remote(&self) -> Result<(), RemoteCacheError> {
+        if let Some(ref client) = self.remote {
+            client.connect().await
+        } else {
+            Ok(())
+        }
     }
 
     /// Compute the cache key for a build action
@@ -88,8 +174,8 @@ impl Cache {
         hasher::compute_action_key(command, inputs, env_vars)
     }
 
-    /// Look up a cached result
-    pub fn lookup(&self, key: &str) -> Option<CacheEntry> {
+    /// Look up a cached result (local only)
+    pub fn lookup_local(&self, key: &str) -> Option<CacheEntry> {
         match self.db.get(key.as_bytes()) {
             Ok(Some(data)) => {
                 match CacheEntry::deserialize(&data) {
@@ -104,7 +190,7 @@ impl Cache {
                                 }
                             }
                         }
-                        debug!("Cache hit for {}", key);
+                        debug!("Local cache hit for {}", key);
                         self.stats.write().hits += 1;
                         Some(entry)
                     }
@@ -116,7 +202,7 @@ impl Cache {
                 }
             }
             Ok(None) => {
-                debug!("Cache miss for {}", key);
+                debug!("Local cache miss for {}", key);
                 self.stats.write().misses += 1;
                 None
             }
@@ -128,13 +214,97 @@ impl Cache {
         }
     }
 
-    /// Store a build result in the cache
-    pub fn store(
+    /// Look up a cached result (sync, local only for compatibility)
+    pub fn lookup(&self, key: &str) -> Option<CacheEntry> {
+        self.lookup_local(key)
+    }
+
+    /// Look up a cached result (async, respects cache mode)
+    pub async fn lookup_async(&self, key: &str) -> Option<CacheEntry> {
+        match self.config.mode {
+            CacheMode::Local => self.lookup_local(key),
+            CacheMode::Remote => {
+                // Remote only - try remote, fail if not available
+                self.lookup_remote(key).await
+            }
+            CacheMode::Auto => {
+                // Try remote first with timeout, fall back to local
+                if self.config.remote.pull_policy == PullPolicy::Never {
+                    return self.lookup_local(key);
+                }
+
+                if let Some(ref client) = self.remote {
+                    if client.is_connected() {
+                        let timeout = Duration::from_secs(2);
+                        match tokio::time::timeout(timeout, client.lookup(key)).await {
+                            Ok(Ok(Some(wire_entry))) => {
+                                debug!("Remote cache hit for {}", key);
+                                self.stats.write().remote_hits += 1;
+                                // Convert wire entry to CacheEntry
+                                return Some(CacheEntry {
+                                    command: wire_entry.command.clone(),
+                                    outputs: wire_entry.to_outputs(),
+                                    created: wire_entry.created_time(),
+                                });
+                            }
+                            Ok(Ok(None)) => {
+                                debug!("Remote cache miss for {}", key);
+                                self.stats.write().remote_misses += 1;
+                            }
+                            Ok(Err(e)) => {
+                                warn!("Remote cache error: {}", e);
+                                self.stats.write().remote_errors += 1;
+                            }
+                            Err(_) => {
+                                debug!("Remote cache timeout for {}", key);
+                                self.stats.write().remote_timeouts += 1;
+                            }
+                        }
+                    }
+                }
+
+                // Fall back to local
+                self.lookup_local(key)
+            }
+        }
+    }
+
+    /// Look up from remote cache only
+    async fn lookup_remote(&self, key: &str) -> Option<CacheEntry> {
+        if let Some(ref client) = self.remote {
+            match client.lookup(key).await {
+                Ok(Some(wire_entry)) => {
+                    debug!("Remote cache hit for {}", key);
+                    self.stats.write().remote_hits += 1;
+                    Some(CacheEntry {
+                        command: wire_entry.command.clone(),
+                        outputs: wire_entry.to_outputs(),
+                        created: wire_entry.created_time(),
+                    })
+                }
+                Ok(None) => {
+                    debug!("Remote cache miss for {}", key);
+                    self.stats.write().remote_misses += 1;
+                    None
+                }
+                Err(e) => {
+                    warn!("Remote cache error: {}", e);
+                    self.stats.write().remote_errors += 1;
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Store a build result in the local cache
+    pub fn store_local(
         &self,
         key: &str,
         outputs: &[&Path],
         command: &str,
-    ) -> Result<(), ExecError> {
+    ) -> Result<CacheEntry, ExecError> {
         // Store each output in the blob store
         let mut output_hashes = Vec::new();
         for output in outputs {
@@ -160,10 +330,73 @@ impl Cache {
             ))
         })?;
 
-        debug!("Cached result for {}", key);
+        debug!("Cached result locally for {}", key);
         self.stats.write().stores += 1;
 
+        Ok(entry)
+    }
+
+    /// Store a build result in the cache (sync, local only for compatibility)
+    pub fn store(
+        &self,
+        key: &str,
+        outputs: &[&Path],
+        command: &str,
+    ) -> Result<(), ExecError> {
+        self.store_local(key, outputs, command)?;
         Ok(())
+    }
+
+    /// Store a build result (async, respects push policy)
+    pub async fn store_async(
+        &self,
+        key: &str,
+        outputs: &[&Path],
+        command: &str,
+    ) -> Result<(), ExecError> {
+        // Always store locally first
+        let entry = self.store_local(key, outputs, command)?;
+
+        // Push to remote if configured
+        if self.should_push() {
+            if let Some(ref client) = self.remote {
+                if client.is_connected() {
+                    let wire_entry = WireCacheEntry::from_entry(
+                        &entry.command,
+                        &entry.outputs,
+                        entry.created,
+                    );
+
+                    // Push entry metadata
+                    if let Err(e) = client.push_entry(key, &wire_entry).await {
+                        warn!("Failed to push cache entry to remote: {}", e);
+                    } else {
+                        debug!("Pushed cache entry to remote: {}", key);
+
+                        // Push blobs
+                        for (path, _hash) in &entry.outputs {
+                            if let Err(e) = client.push_blob_from_file(path).await {
+                                warn!("Failed to push blob to remote: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if we should push to remote cache
+    fn should_push(&self) -> bool {
+        if !self.config.has_remote() {
+            return false;
+        }
+
+        match self.config.remote.push_policy {
+            PushPolicy::Never => false,
+            PushPolicy::OnSuccess | PushPolicy::Always => true,
+        }
     }
 
     /// Restore cached outputs to their original locations
