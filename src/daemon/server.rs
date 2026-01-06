@@ -69,9 +69,15 @@ impl DaemonServer {
             std::fs::create_dir_all(parent)?;
         }
 
-        // Remove stale socket file
-        if self.socket_path.exists() {
-            std::fs::remove_file(&self.socket_path)?;
+        // Remove stale socket file if it exists.
+        // Use remove_file directly - it handles race conditions better than
+        // checking exists() first. If file doesn't exist, that's fine.
+        // If another process created it, we'll detect and report the error.
+        if let Err(e) = std::fs::remove_file(&self.socket_path) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                return Err(e.into());
+            }
+            // File didn't exist, which is fine
         }
 
         // Create and bind socket
@@ -109,9 +115,9 @@ impl DaemonServer {
             }
 
             // Try to receive a request with timeout
-            socket
-                .set_opt::<nng::options::RecvTimeout>(Some(Duration::from_millis(100)))
-                .ok();
+            if let Err(e) = socket.set_opt::<nng::options::RecvTimeout>(Some(Duration::from_millis(100))) {
+                tracing::warn!("Failed to set receive timeout: {}", e);
+            }
 
             match socket.recv() {
                 Ok(msg) => {
@@ -417,8 +423,12 @@ impl DaemonServer {
                                 }
                             }
                         }
-                        DaemonResponse::QueryResult {
-                            data: serde_json::to_string_pretty(&entries).unwrap_or_default(),
+                        match serde_json::to_string_pretty(&entries) {
+                            Ok(data) => DaemonResponse::QueryResult { data },
+                            Err(e) => DaemonResponse::Error {
+                                code: ErrorCode::ParseError,
+                                message: format!("Failed to serialize compilation database: {}", e),
+                            },
                         }
                     }
                     Err(e) => DaemonResponse::Error {

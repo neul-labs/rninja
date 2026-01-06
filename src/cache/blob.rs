@@ -141,13 +141,20 @@ impl BlobStore {
     }
 
     /// Get the path for a blob
+    ///
+    /// Uses the first 2 characters of the hash as a subdirectory for
+    /// filesystem fanout. For hashes shorter than 2 characters (which
+    /// shouldn't occur with blake3), pads with zeros.
     fn blob_path(&self, hash: &str) -> PathBuf {
         // Use first 2 characters as subdirectory for fanout
-        if hash.len() >= 2 {
-            self.root.join(&hash[..2]).join(hash)
+        // Pad short hashes to ensure they still go into a subdirectory
+        let prefix = if hash.len() >= 2 {
+            &hash[..2]
         } else {
-            self.root.join(hash)
-        }
+            // Pad with zeros for hashes shorter than 2 chars
+            "00"
+        };
+        self.root.join(prefix).join(hash)
     }
 
     /// Run garbage collection - remove unreferenced blobs.

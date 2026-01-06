@@ -10,6 +10,9 @@ use std::path::Path;
 /// - The command string
 /// - Content hashes of all input files
 /// - Relevant environment variables
+///
+/// Note: Input files that don't exist are silently skipped (not included in hash).
+/// This is intentional - it allows incremental builds where inputs may not yet exist.
 pub fn compute_action_key(
     command: &str,
     inputs: &[&Path],
@@ -23,11 +26,21 @@ pub fn compute_action_key(
     hasher.update(b"\n");
 
     // Hash input files (sorted for determinism)
+    // Note: Using lossy conversion for paths with invalid UTF-8.
+    // This is a limitation - paths should be valid UTF-8 for deterministic caching.
     let mut sorted_inputs: Vec<_> = inputs.iter().collect();
-    sorted_inputs.sort_by_key(|p| p.to_string_lossy().to_string());
+    sorted_inputs.sort_by_key(|p| {
+        p.to_string_lossy()
+            .chars()
+            .take(256) // Limit path length for sorting stability
+            .collect::<String>()
+    });
 
     for input in sorted_inputs {
-        if input.exists() {
+        // Only include existing files in the hash.
+        // We use metadata() which is cheaper than hash_file() but still avoids
+        // the double stat since hash_file will fail anyway if file doesn't exist.
+        if input.metadata().is_ok() {
             hasher.update(b"in:");
             hasher.update(input.to_string_lossy().as_bytes());
             hasher.update(b":");

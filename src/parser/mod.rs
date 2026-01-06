@@ -347,7 +347,10 @@ impl<'a> Parser<'a> {
     }
 
     fn expand_path(&self, path: &str) -> String {
-        // Handle $var and ${var} expansion
+        // Handle $var and ${var} expansion for path variables
+        // Note: Full variable expansion (including $in, $out, etc.) happens later
+        // in the graph construction phase. This only expands manifest-level
+        // global variables for path components.
         let mut result = path.to_string();
         for (key, value) in &self.manifest.variables {
             result = result.replace(&format!("${}", key), value);

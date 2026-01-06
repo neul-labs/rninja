@@ -357,6 +357,10 @@ impl CacheServer {
     }
 
     fn blob_path(&self, hash: &str) -> PathBuf {
+        // Validate hash to prevent path traversal attacks
+        if !is_valid_hash(hash) {
+            panic!("invalid hash format in blob_path: {}", hash);
+        }
         let prefix = if hash.len() >= 2 { &hash[..2] } else { hash };
         self.config
             .storage_dir

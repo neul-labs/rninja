@@ -7,6 +7,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use tracing::warn;
 
 /// Entry in the build log
 #[derive(Debug, Clone)]
@@ -259,9 +260,27 @@ impl Default for MtimeCache {
 
 /// Get file mtime in nanoseconds since epoch
 pub fn get_mtime_ns(path: &Path) -> Option<u64> {
-    let metadata = std::fs::metadata(path).ok()?;
-    let mtime = metadata.modified().ok()?;
-    let duration = mtime.duration_since(SystemTime::UNIX_EPOCH).ok()?;
+    let metadata = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(e) => {
+            warn!("Failed to get metadata for {}: {}", path.display(), e);
+            return None;
+        }
+    };
+    let mtime = match metadata.modified() {
+        Ok(m) => m,
+        Err(e) => {
+            warn!("Failed to get mtime for {}: {}", path.display(), e);
+            return None;
+        }
+    };
+    let duration = match mtime.duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(d) => d,
+        Err(e) => {
+            warn!("Failed to compute duration for {}: {}", path.display(), e);
+            return None;
+        }
+    };
     Some(duration.as_nanos() as u64)
 }
 

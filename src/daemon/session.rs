@@ -196,8 +196,12 @@ impl SessionManager {
     }
 
     /// Create a new session
+    ///
+    /// Enforces the maximum concurrent builds limit atomically.
+    /// If the limit is reached, returns an error instead of creating a session.
     pub fn create_session(&self, request: BuildRequest) -> Result<Arc<BuildSession>, String> {
-        let sessions = self.sessions.read();
+        // Check limit and create session atomically under write lock
+        let mut sessions = self.sessions.write();
 
         // Check concurrent build limit
         let active_count = sessions.values().filter(|s| s.is_running()).count();
@@ -208,10 +212,9 @@ impl SessionManager {
             ));
         }
 
-        drop(sessions);
-
+        // Create and insert session while still holding the lock
         let session = Arc::new(BuildSession::new(request));
-        self.sessions.write().insert(session.id.clone(), session.clone());
+        sessions.insert(session.id.clone(), session.clone());
 
         Ok(session)
     }

@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Garbage collection options
 #[derive(Debug, Clone, Default)]
@@ -74,25 +74,30 @@ pub fn run_cache_gc(options: GcOptions, verbose: bool) -> Result<GcReport, ExecE
 
         for item in db.iter() {
             if let Ok((key, value)) = item {
-                if let Ok(entry) = CacheEntry::deserialize(&value) {
-                    let age = now.duration_since(entry.created).unwrap_or_default();
+                match CacheEntry::deserialize(&value) {
+                    Ok(entry) => {
+                        let age = now.duration_since(entry.created).unwrap_or_default();
 
-                    if age > max_age {
-                        report.expired_entries += 1;
-                        report.expired_bytes += value.len() as u64;
-                        entries_to_remove.push(key.to_vec());
-                        if verbose {
-                            debug!(
-                                "Expired entry: {} (age: {} days)",
-                                String::from_utf8_lossy(&key),
-                                age.as_secs() / 86400
-                            );
+                        if age > max_age {
+                            report.expired_entries += 1;
+                            report.expired_bytes += value.len() as u64;
+                            entries_to_remove.push(key.to_vec());
+                            if verbose {
+                                debug!(
+                                    "Expired entry: {} (age: {} days)",
+                                    String::from_utf8_lossy(&key),
+                                    age.as_secs() / 86400
+                                );
+                            }
+                        } else {
+                            // Track referenced hashes
+                            for (_, hash) in &entry.outputs {
+                                referenced_hashes.insert(hash.clone());
+                            }
                         }
-                    } else {
-                        // Track referenced hashes
-                        for (_, hash) in &entry.outputs {
-                            referenced_hashes.insert(hash.clone());
-                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to deserialize cache entry: {}", e);
                     }
                 }
             }
@@ -101,9 +106,14 @@ pub fn run_cache_gc(options: GcOptions, verbose: bool) -> Result<GcReport, ExecE
         // Just collect all referenced hashes
         for item in db.iter() {
             if let Ok((_, value)) = item {
-                if let Ok(entry) = CacheEntry::deserialize(&value) {
-                    for (_, hash) in &entry.outputs {
-                        referenced_hashes.insert(hash.clone());
+                match CacheEntry::deserialize(&value) {
+                    Ok(entry) => {
+                        for (_, hash) in &entry.outputs {
+                            referenced_hashes.insert(hash.clone());
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to deserialize cache entry: {}", e);
                     }
                 }
             }
@@ -235,8 +245,13 @@ fn evict_lru(db: &sled::Db, bytes_to_free: u64, dry_run: bool) -> Result<(u64, u
 
     for item in db.iter() {
         if let Ok((key, value)) = item {
-            if let Ok(entry) = CacheEntry::deserialize(&value) {
-                entries.push((key.to_vec(), entry.created, value.len() as u64));
+            match CacheEntry::deserialize(&value) {
+                Ok(entry) => {
+                    entries.push((key.to_vec(), entry.created, value.len() as u64));
+                }
+                Err(e) => {
+                    warn!("Failed to deserialize cache entry during eviction: {}", e);
+                }
             }
         }
     }
