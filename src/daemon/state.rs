@@ -96,28 +96,30 @@ impl DaemonState {
     ) -> anyhow::Result<Arc<CachedManifest>> {
         let build_path = build_dir.join(build_file);
 
-        // Check cache first
-        {
-            let manifests = self.manifests.read();
-            if let Some(cached) = manifests.get(build_dir) {
-                // Check if still valid
-                let current_fingerprint = compute_fingerprint(&build_path)?;
-                if cached.fingerprint == current_fingerprint {
-                    debug!("Using cached manifest for {}", build_dir.display());
-                    return Ok(Arc::new(CachedManifest {
-                        manifest: cached.manifest.clone(),
-                        graph: cached.graph.clone(),
-                        build_log: cached.build_log.clone(),
-                        fingerprint: cached.fingerprint,
-                        last_validated: Instant::now(),
-                        included_files: cached.included_files.clone(),
-                    }));
-                }
-                debug!(
-                    "Manifest changed for {}, reparsing",
-                    build_dir.display()
-                );
+        // Compute fingerprint first (before acquiring locks)
+        let current_fingerprint = compute_fingerprint(&build_path)?;
+
+        // Use write lock to avoid TOCTOU race: we need to check and potentially
+        // update the cache atomically
+        let mut manifests = self.manifests.write();
+
+        if let Some(cached) = manifests.get(build_dir) {
+            // Re-check fingerprint under write lock to avoid race
+            if cached.fingerprint == current_fingerprint {
+                debug!("Using cached manifest for {}", build_dir.display());
+                return Ok(Arc::new(CachedManifest {
+                    manifest: cached.manifest.clone(),
+                    graph: cached.graph.clone(),
+                    build_log: cached.build_log.clone(),
+                    fingerprint: cached.fingerprint,
+                    last_validated: Instant::now(),
+                    included_files: cached.included_files.clone(),
+                }));
             }
+            debug!(
+                "Manifest changed for {}, reparsing",
+                build_dir.display()
+            );
         }
 
         // Parse the manifest
@@ -144,31 +146,26 @@ impl DaemonState {
             included_files,
         };
 
-        // Store in cache
-        {
-            let mut manifests = self.manifests.write();
-
-            // Evict old entries if at capacity
-            if manifests.len() >= self.config.max_cached_manifests {
-                // Remove least recently validated
-                if let Some(oldest) = manifests
-                    .iter()
-                    .min_by_key(|(_, v)| v.last_validated)
-                    .map(|(k, _)| k.clone())
-                {
-                    manifests.remove(&oldest);
-                }
+        // Evict old entries if at capacity
+        if manifests.len() >= self.config.max_cached_manifests {
+            // Remove least recently validated
+            if let Some(oldest) = manifests
+                .iter()
+                .min_by_key(|(_, v)| v.last_validated)
+                .map(|(k, _)| k.clone())
+            {
+                manifests.remove(&oldest);
             }
-
-            manifests.insert(build_dir.clone(), CachedManifest {
-                manifest: cached.manifest.clone(),
-                graph: cached.graph.clone(),
-                build_log: cached.build_log.clone(),
-                fingerprint: cached.fingerprint,
-                last_validated: cached.last_validated,
-                included_files: cached.included_files.clone(),
-            });
         }
+
+        manifests.insert(build_dir.clone(), CachedManifest {
+            manifest: cached.manifest.clone(),
+            graph: cached.graph.clone(),
+            build_log: cached.build_log.clone(),
+            fingerprint: cached.fingerprint,
+            last_validated: cached.last_validated,
+            included_files: cached.included_files.clone(),
+        });
 
         Ok(Arc::new(cached))
     }

@@ -98,7 +98,10 @@ impl<'a> Parser<'a> {
             if !line.starts_with(' ') && !line.starts_with('\t') {
                 break;
             }
-            let line = self.lexer.next_line().unwrap();
+            let line = self.lexer.next_line().ok_or_else(|| ParseError::Syntax {
+                line: self.current_line,
+                message: "unexpected end of file while parsing rule".to_string(),
+            })?;
             self.current_line = self.lexer.line_number();
 
             let line = line.trim();
@@ -186,7 +189,10 @@ impl<'a> Parser<'a> {
             if !line.starts_with(' ') && !line.starts_with('\t') {
                 break;
             }
-            let line = self.lexer.next_line().unwrap();
+            let line = self.lexer.next_line().ok_or_else(|| ParseError::Syntax {
+                line: self.current_line,
+                message: "unexpected end of file while parsing build".to_string(),
+            })?;
             self.current_line = self.lexer.line_number();
 
             let line = line.trim();
@@ -223,7 +229,10 @@ impl<'a> Parser<'a> {
             if !line.starts_with(' ') && !line.starts_with('\t') {
                 break;
             }
-            let line = self.lexer.next_line().unwrap();
+            let line = self.lexer.next_line().ok_or_else(|| ParseError::Syntax {
+                line: self.current_line,
+                message: "unexpected end of file while parsing pool".to_string(),
+            })?;
             self.current_line = self.lexer.line_number();
 
             let line = line.trim();

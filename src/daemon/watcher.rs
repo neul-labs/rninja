@@ -131,12 +131,6 @@ impl FileWatcher {
     pub fn take_event_receiver(&mut self) -> Option<Receiver<WatchEvent>> {
         self.event_rx.take()
     }
-
-    /// Try to receive an event (non-blocking)
-    pub fn try_recv(&self) -> Option<WatchEvent> {
-        // This will return None if the receiver was taken
-        None
-    }
 }
 
 impl Default for FileWatcher {

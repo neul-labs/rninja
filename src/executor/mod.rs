@@ -38,6 +38,8 @@ pub struct Config {
     pub output_mode: OutputMode,
     /// Trace output file (None = disabled)
     pub trace_file: Option<PathBuf>,
+    /// Tokio runtime handle (None means create one per run)
+    pub runtime: Option<tokio::runtime::Handle>,
 }
 
 impl Default for Config {
@@ -52,6 +54,7 @@ impl Default for Config {
             cache_config: CacheConfig::from_env(),
             output_mode: OutputMode::Human,
             trace_file: None,
+            runtime: None,
         }
     }
 }
@@ -237,14 +240,49 @@ impl Executor {
 
     /// Run the build for given targets
     pub fn run(&self, graph: &Graph, targets: &[&str]) -> Result<Stats, ExecError> {
-        // Use tokio runtime for async execution
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(self.config.parallelism.min(num_cpus::get()))
-            .enable_all()
-            .build()
-            .map_err(|e| ExecError::SpawnError(e.into()))?;
+        // Use configured runtime handle if available, otherwise create one
+        if let Some(handle) = &self.config.runtime {
+            handle.block_on(self.run_async(graph, targets))
+        } else {
+            // Create a new runtime for this build
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(self.config.parallelism.min(num_cpus::get()))
+                .enable_all()
+                .build()
+                .map_err(|e| ExecError::SpawnError(e.into()))?;
 
-        rt.block_on(self.run_async(graph, targets))
+            rt.block_on(self.run_async(graph, targets))
+        }
+    }
+
+    /// Handle the result of a completed task
+    fn handle_task_result(
+        result: Result<Result<(String, bool, Option<String>), (String, ExecError)>, tokio::task::JoinError>,
+        cache: &Option<Cache>,
+    ) {
+        match result {
+            Ok(Ok((path, executed, cache_key))) => {
+                // Store in cache if executed (not from cache)
+                if executed {
+                    if let (Some(c), Some(key)) = (cache, cache_key) {
+                        let outputs = vec![Path::new(&path)];
+                        if let Err(e) = c.store(&key, &outputs, "") {
+                            debug!("Failed to cache {}: {}", path, e);
+                        }
+                    }
+                }
+            }
+            Ok(Err((path, e))) => {
+                eprintln!("FAILED: {}", path);
+                if let ExecError::CommandFailed { command, code } = &e {
+                    eprintln!("Command: {}", command);
+                    eprintln!("Exit code: {}", code);
+                }
+            }
+            Err(e) => {
+                eprintln!("Task error: {}", e);
+            }
+        }
     }
 
     async fn run_async(&self, graph: &Graph, targets: &[&str]) -> Result<Stats, ExecError> {
@@ -383,7 +421,17 @@ impl Executor {
                 let handle = tokio::spawn(async move {
                     // Acquire semaphore permit
                     let sem = state.get_pool_semaphore(pool.as_deref());
-                    let _permit = sem.acquire().await.unwrap();
+                    let permit = match sem.acquire().await {
+                        Ok(permit) => permit,
+                        Err(e) => {
+                            tracing::error!("Failed to acquire semaphore: {}", e);
+                            state.mark_failed(&path);
+                            return Err((path, ExecError::SpawnError(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("semaphore error: {}", e),
+                            ))));
+                        }
+                    };
 
                     // Allocate thread ID for tracing
                     let tid = state.allocate_tid();
@@ -436,56 +484,14 @@ impl Executor {
                 let (result, _idx, remaining) = futures::future::select_all(handles).await;
                 handles = remaining;
 
-                match result {
-                    Ok(Ok((path, executed, cache_key))) => {
-                        // Store in cache if executed (not from cache)
-                        if executed {
-                            if let (Some(cache), Some(key)) = (&self.cache, cache_key) {
-                                let outputs = vec![Path::new(&path)];
-                                if let Err(e) = cache.store(&key, &outputs, "") {
-                                    debug!("Failed to cache {}: {}", path, e);
-                                }
-                            }
-                        }
-                    }
-                    Ok(Err((path, e))) => {
-                        eprintln!("FAILED: {}", path);
-                        if let ExecError::CommandFailed { command, code } = &e {
-                            eprintln!("Command: {}", command);
-                            eprintln!("Exit code: {}", code);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Task error: {}", e);
-                    }
-                }
+                Self::handle_task_result(result, &self.cache);
             }
         }
 
         // Wait for remaining handles
         for handle in handles {
-            match handle.await {
-                Ok(Ok((path, executed, cache_key))) => {
-                    if executed {
-                        if let (Some(cache), Some(key)) = (&self.cache, cache_key) {
-                            let outputs = vec![Path::new(&path)];
-                            if let Err(e) = cache.store(&key, &outputs, "") {
-                                debug!("Failed to cache {}: {}", path, e);
-                            }
-                        }
-                    }
-                }
-                Ok(Err((path, e))) => {
-                    eprintln!("FAILED: {}", path);
-                    if let ExecError::CommandFailed { command, code } = &e {
-                        eprintln!("Command: {}", command);
-                        eprintln!("Exit code: {}", code);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Task error: {}", e);
-                }
-            }
+            let result = handle.await;
+            Self::handle_task_result(result, &self.cache);
         }
 
         let fail_count = state.fail_count.load(Ordering::SeqCst);
@@ -595,7 +601,9 @@ async fn execute_node_async(
             OutputMode::Human => {
                 let desc = description.unwrap_or("cached");
                 println!("[{}/{}] {} (cached)", idx, total, desc);
-                std::io::stdout().flush().ok();
+                if let Err(e) = std::io::stdout().flush() {
+                    debug!("Failed to flush stdout: {}", e);
+                }
             }
             OutputMode::Json => {
                 JsonEvent::CacheHit {
@@ -623,7 +631,9 @@ async fn execute_node_async(
             } else {
                 println!("[{}/{}] {}", idx, total, desc);
             }
-            std::io::stdout().flush().ok();
+            if let Err(e) = std::io::stdout().flush() {
+                debug!("Failed to flush stdout: {}", e);
+            }
         }
         OutputMode::Json => {
             JsonEvent::TargetStarted {
@@ -654,10 +664,14 @@ async fn execute_node_async(
 
     // Print output if any
     if !output.stdout.is_empty() {
-        std::io::stdout().write_all(&output.stdout).ok();
+        if let Err(e) = std::io::stdout().write_all(&output.stdout) {
+            debug!("Failed to write to stdout: {}", e);
+        }
     }
     if !output.stderr.is_empty() {
-        std::io::stderr().write_all(&output.stderr).ok();
+        if let Err(e) = std::io::stderr().write_all(&output.stderr) {
+            debug!("Failed to write to stderr: {}", e);
+        }
     }
 
     // Parse depfile if present

@@ -12,11 +12,16 @@ use crate::error::ExecError;
 use nng::options::Options;
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 use tracing::{debug, error, info, warn};
+
+/// Validates that a hash contains only safe characters for use in file paths
+fn is_valid_hash(hash: &str) -> bool {
+    !hash.is_empty() && hash.chars().all(|c| c.is_ascii_hexdigit())
+}
 
 /// The cache server
 pub struct CacheServer {
@@ -280,6 +285,12 @@ impl CacheServer {
     }
 
     fn handle_push_blob(&self, hash: &str, data: &[u8], offset: u64, total: u64) -> Response {
+        // Validate hash to prevent path traversal attacks
+        if !is_valid_hash(hash) {
+            warn!("Invalid hash received: {}", hash);
+            return Response::error(ErrorCode::InvalidRequest, "invalid hash format");
+        }
+
         // For simplicity, we store the entire blob when offset is 0 and data.len() == total
         // A full implementation would handle chunked uploads
         if offset == 0 && data.len() as u64 == total {
@@ -309,6 +320,12 @@ impl CacheServer {
     }
 
     fn handle_push_blob_complete(&self, hash: &str, _checksum: &str) -> Response {
+        // Validate hash to prevent path traversal attacks
+        if !is_valid_hash(hash) {
+            warn!("Invalid hash received: {}", hash);
+            return Response::error(ErrorCode::InvalidRequest, "invalid hash format");
+        }
+
         // Verify blob exists
         let blob_path = self.blob_path(hash);
         if blob_path.exists() {
@@ -321,6 +338,14 @@ impl CacheServer {
     }
 
     fn handle_pull_blobs(&self, hashes: &[String]) -> Response {
+        // Validate all hashes first
+        for hash in hashes {
+            if !is_valid_hash(hash) {
+                warn!("Invalid hash received: {}", hash);
+                return Response::error(ErrorCode::InvalidRequest, "invalid hash format");
+            }
+        }
+
         // Check all blobs exist
         for hash in hashes {
             let blob_path = self.blob_path(hash);

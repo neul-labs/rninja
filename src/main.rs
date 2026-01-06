@@ -96,6 +96,7 @@ fn run_build(cli: &Cli) -> Result<()> {
         cache_config: cache::CacheConfig::from_env(),
         output_mode,
         trace_file: cli.trace.as_ref().map(std::path::PathBuf::from),
+        runtime: None,
     });
 
     executor.run(&graph, &targets)?;
