@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "A drop-in replacement for Ninja with caching and improved scheduling"
 license = "MIT"
-repository = "https://github.com/user/rninja"
+repository = "https://github.com/neul-labs/rninja"
+homepage = "https://github.com/neul-labs/rninja"
+documentation = "https://docs.neullabs.com/rninja"
+readme = "README.md"
 keywords = ["build", "ninja", "cache", "compiler"]
 categories = ["development-tools::build-utils"]
 
