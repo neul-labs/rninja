@@ -1,143 +1,137 @@
 # rninja
 
-A fast, Rust-based drop-in replacement for [Ninja](https://ninja-build.org/) with built-in caching and improved scheduling.
+[![Crates.io](https://img.shields.io/crates/v/rninja.svg)](https://crates.io/crates/rninja)
+[![Documentation](https://img.shields.io/badge/docs-neullabs.com-blue)](https://docs.neullabs.com/rninja)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-rninja layers advanced scheduling, local caching, and optional remote cache synchronization on top of familiar Ninja semantics. It targets large, multi-language codebases that already rely on generators such as CMake, GN, or Meson, and want dramatic cuts in incremental build times without rewriting their build descriptions.
+**Build faster. Cache smarter. Drop-in ready.**
 
-## Quick Start
+A Rust-powered drop-in replacement for [Ninja](https://ninja-build.org/) with built-in caching and modern scheduling. Cut your build times without changing your build files.
+
+## Installation
 
 ```bash
-# Build from source
-cargo build --release
+# From crates.io
+cargo install rninja
 
-# Use as drop-in replacement for ninja
-./target/release/rninja
-
-# Or install system-wide
+# Or build from source
+git clone https://github.com/neul-labs/rninja
+cd rninja
 cargo install --path .
 ```
 
-## Why rninja
+## Usage
 
-- **Drop-in familiarity**: Works with existing `.ninja` files, so teams only swap the executor binary while keeping their current generators and workflows.
-- **Modern scheduling**: Uses a Rust concurrency runtime to keep CPU, disk, and network resources saturated on large builds, minimizing idle time compared to classic `ninja -jN`.
-- **Content-addressed caching**: Hashes inputs, compiler options, and produced artifacts to skip repeated work during local builds and CI runs.
-- **Remote cache awareness**: Shares cached objects between developer laptops and CI agents, giving teams "first build fast" behavior once caches are warm.
-- **Safety-first engineering**: Rust eliminates common concurrency bugs in the executor; deterministic semantics mirror Ninja to maintain trust.
+rninja works exactly like ninja—just swap the binary:
 
-## Expected Impact
+```bash
+# Use directly
+rninja
 
-| Scenario | Description | Estimated Speedup* |
-| --- | --- | --- |
-| Warm incremental builds | Developers rebuilding after small changes with high cache hit rates | 2× – 5× |
-| Shared CI cache | CI pipeline reusing cached objects from prior runs or other machines | 2× – 5× |
-| Cold builds on modern hardware | Full rebuilds that still benefit from improved scheduling and parallel IO | 1.3× – 2× |
+# Or with your existing workflow
+rninja -C out/Release
+rninja -j8 my_target
 
-\*Actual gains depend on project size, cache hit rate, and hardware.
-
-## Where rninja Fits Best
-
-- Large C/C++ or mixed-language monorepos that generate Ninja files and suffer from multi-minute incremental builds.
-- Organizations running many CI builds per day that want to eliminate redundant compilation across nodes.
-- Embedded, graphics, or simulation projects with expensive code generation steps that benefit from artifact reuse.
-- Game studios and performance-sensitive software teams that already rely on Ninja but need better scaling across cores.
-
-## Adoption Considerations
-
-- Cache efficacy is the biggest multiplier: projects with frequent repeated builds, shared CI caches, or multiple developers compiling similar targets will see the largest wins.
-- Compatibility matters: rninja must faithfully implement Ninja features (depfiles, restat, generator rules) to maintain confidence; early adopters should plan validation runs side-by-side with standard Ninja.
-- Installation should be frictionless: a single static binary plus configuration for cache stores (local path or remote endpoint) keeps onboarding straightforward.
-- Concurrent invocations across repos are supported through a single rninja daemon: CLI commands submit work to the daemon, which orchestrates multiple repositories simultaneously while keeping per-repo state isolated.
-
-## Drop-in Usage
-
-1. **Generate `build.ninja` as usual** with GN, CMake, Meson, or any other generator. No DSL changes or rule rewrites are required.
-2. **Install the rninja binary** on developer machines or CI images (rename to `ninja` if desired). CLI flags mirror Ninja (`-C`, `-j`, `-d`, etc.), so scripts keep working.
-3. **Point rninja at cache locations** using config files or env vars like `RNINJA_CACHE_DIR`, `RNINJA_REMOTE_URL`, and `RNINJA_CACHE_MODE=local|remote|both`. Defaults keep caching local-only if no remote is configured.
-4. **Run builds exactly the same way**: `rninja -C out/Release chrome` or `ninja` symlinked to rninja. Depfiles, restat logic, rsp files, and generator edges behave identically, so teams can A/B test safely.
-
-During evaluation, keep standard Ninja available (e.g., `ninja.orig`) to compare timings or fall back instantly if needed. The long-term goal is zero behavior drift, so any mismatches should be filed as bugs.
-
-## Available Tools
-
-rninja includes all standard ninja subtools plus additional utilities:
-
+# Symlink as ninja for seamless integration
+ln -s $(which rninja) /usr/local/bin/ninja
 ```
-rninja -t list
-rninja subtools:
-    clean      remove built files
-    cleandead  clean built files no longer produced by manifest
-    commands   list all commands required to rebuild given targets
-    compdb     dump JSON compilation database to stdout
-    config     show config file locations and generate sample config
-    deps       show dependencies stored in the deps log
-    graph      output graphviz dot file for targets
-    inputs     list all inputs required to rebuild given targets
-    path       find dependency path between two targets
-    query      show inputs/outputs for a path
-    recompact  recompact ninja-internal data structures
-    restat     restat all outputs in the build log
-    rules      list all rules
-    targets    list targets by their rule or depth in the DAG
-```
+
+All ninja flags work: `-C`, `-j`, `-k`, `-d`, `-t`, and more.
+
+## Why rninja?
+
+| Feature | Benefit |
+|---------|---------|
+| **Drop-in compatible** | Works with existing `.ninja` files from CMake, GN, Meson, or any generator |
+| **Built-in caching** | Content-addressed cache skips redundant work automatically |
+| **Modern scheduler** | Rust async runtime keeps all cores busy, minimizing idle time |
+| **Remote cache ready** | Share cached artifacts across machines and CI runners |
+
+### Performance
+
+| Scenario | Speedup |
+|----------|---------|
+| Warm incremental builds | 2× – 5× |
+| CI with shared cache | 2× – 5× |
+| Cold builds | 1.3× – 2× |
+
+See [BENCHMARK.md](BENCHMARK.md) for detailed comparisons.
 
 ## Configuration
 
-rninja supports configuration files in TOML format. Configuration is loaded from (in order of precedence):
+rninja works out of the box with sensible defaults. For customization:
 
-1. `.rninjarc` (project local)
-2. `~/.rninjarc` (user home)
-3. `~/.config/rninja/config.toml` (XDG style)
-
-Generate a sample config with:
 ```bash
+# Generate a sample config
 rninja -t config -v
 ```
 
+Config files are loaded from:
+1. `.rninjarc` (project)
+2. `~/.rninjarc` (user)
+3. `~/.config/rninja/config.toml` (XDG)
+
 ### Environment Variables
 
-- `RNINJA_CACHE_DIR` - Cache directory location
-- `RNINJA_CACHE_ENABLED` - Enable/disable caching (0 or 1)
-- `RUST_LOG` - Logging level (e.g., `debug`, `info`)
+| Variable | Description |
+|----------|-------------|
+| `RNINJA_CACHE_DIR` | Cache directory location |
+| `RNINJA_CACHE_ENABLED` | Enable/disable caching (`0` or `1`) |
+| `RNINJA_REMOTE_URL` | Remote cache server URL |
+| `RNINJA_CACHE_MODE` | `local`, `remote`, or `both` |
 
-## Performance
+## Subtools
 
-See [BENCHMARK.md](BENCHMARK.md) for detailed performance comparisons with ninja.
+All ninja subtools plus extras:
 
-Key highlights:
-- **30% faster** cold builds due to improved scheduling
-- **Sub-millisecond** no-op detection via optimized build log
-- **Automatic caching** of build artifacts for faster rebuilds
+```bash
+rninja -t clean       # Remove built files
+rninja -t compdb      # Dump JSON compilation database
+rninja -t graph       # Output graphviz dot file
+rninja -t deps        # Show stored dependencies
+rninja -t query       # Show inputs/outputs for a path
+rninja -t config      # Show/generate configuration
+```
 
-## Technology Choices
+Run `rninja -t list` for the complete list.
 
-- **async-nng** powers the remote cache transport layer, giving rninja a high-throughput, async messaging fabric for publishing and fetching artifacts over NNG sockets.
-- **sled** acts as the embedded metadata/index database for the local content-addressed cache, enabling crash-safe tracking of digests, inputs, and compiler flags.
-- **rkyv** stores the actual artifact payloads as a content-addressed object store, providing deduplicated blobs that sled and async-nng reference for local and remote reuse.
+## Who is rninja for?
 
-## Roadmap Highlights
+- **C/C++ projects** with multi-minute incremental builds
+- **CI pipelines** running many builds per day
+- **Monorepos** with shared code across teams
+- **Game studios** and performance-sensitive teams already using Ninja
+- **Anyone** who wants faster builds without changing their workflow
 
-- **Phased delivery**: Phase 0 builds the daemon + compatibility layer, Phase 1 enables local caching, Phase 2 adds async-nng powered remote caches, and Phase 3 focuses on observability/hardening—each phase ships specific unit tests and documentation updates.
-- **Benchmark harness**: automated comparisons between rninja and stock Ninja (local and remote cache modes) keep performance goals measurable throughout the phases.
-- **Compatibility & test suites**: releases are gated by regression suites plus targeted unit/integration tests for daemon, cache, and remote transport behavior, guarding the drop-in guarantee.
+## How it works
 
-## Additional Documentation
+1. **Parse** your existing `build.ninja` file (no changes needed)
+2. **Hash** inputs, compiler flags, and environment
+3. **Check cache** for matching artifacts
+4. **Build** only what's actually changed
+5. **Store** results for next time
 
-- `docs/performance.md` — deeper dive into speed expectations, what influences cache hit rates, and how to reason about cold vs incremental builds.
-- `docs/market.md` — outlines core user personas, project types, and adoption channels for rninja.
-- `docs/sensitivities.md` — summarizes the key risks, engineering sensitivities, and success criteria for the project.
-- `docs/dropin.md` — explains CLI compatibility, configuration knobs, and validation checklists for swapping rninja in.
-- `docs/architecture.md` — describes the executor, cache, and transport components and how they preserve Ninja semantics.
-- `docs/roadmap.md` — details planned benchmarking and compatibility milestones.
+The local cache uses [sled](https://github.com/spacejam/sled) for metadata and content-addressed blob storage for artifacts. Optional remote caching uses [nng](https://nng.nanomsg.org/) for high-throughput artifact sharing.
 
-## Status
+## Contributing
 
-rninja is functional and can be used as a drop-in replacement for ninja. The core features are implemented:
+Contributions welcome! Please see our [GitHub repository](https://github.com/neul-labs/rninja) for:
 
-- Full ninja manifest parsing
-- Parallel build execution with tokio
-- Local content-addressed caching with sled
-- Build log compatibility (.ninja_log format)
-- All standard subtools
+- Bug reports and feature requests
+- Pull requests
+- Architecture discussions
 
-Contributions, questions, or architectural discussions are welcome via issues and discussions.
+## Documentation
+
+- [Performance deep-dive](docs/performance.md)
+- [Architecture overview](docs/architecture.md)
+- [Drop-in compatibility guide](docs/dropin.md)
+- [Roadmap](docs/roadmap.md)
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+Built with Rust by [Neul Labs](https://github.com/neul-labs)
