@@ -1,0 +1,277 @@
+# rninja Documentation Configuration
+# Material for MkDocs theme
+
+site_name: rninja
+site_url: https://docs.neullabs.com/rninja
+site_author: Neul Labs
+site_description: >-
+  High-performance drop-in replacement for Ninja build system with
+  built-in caching and modern scheduling.
+
+repo_name: neul-labs/rninja
+repo_url: https://github.com/neul-labs/rninja
+edit_uri: edit/main/documentation/docs/
+
+copyright: Copyright &copy; 2024 Neul Labs
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  language: en
+
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/rocket-launch
+
+  features:
+    # Navigation
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+
+    # Table of Contents
+    - toc.follow
+
+    # Search
+    - search.suggest
+    - search.highlight
+    - search.share
+
+    # Header
+    - header.autohide
+
+    # Content
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - content.action.edit
+    - content.action.view
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+      lang: en
+
+  - tags:
+      tags_file: tags.md
+
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+  # PyMdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      normalize_issue_symbols: true
+      repo_url_shorthand: true
+      user: neul-labs
+      repo: rninja
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      auto_append:
+        - includes/abbreviations.md
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/neul-labs/rninja
+      name: rninja on GitHub
+    - icon: fontawesome/brands/rust
+      link: https://crates.io/crates/rninja
+      name: rninja on crates.io
+
+  status:
+    new: Recently added
+    deprecated: Deprecated
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/extra.js
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Overview: getting-started/overview.md
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+    - Your First Build: getting-started/first-build.md
+    - Migrating from Ninja: getting-started/migration.md
+  - User Guide:
+    - Basic Usage: user-guide/basic-usage.md
+    - CLI Reference: user-guide/cli-reference.md
+    - Configuration:
+      - Overview: user-guide/configuration/overview.md
+      - Config Files: user-guide/configuration/config-files.md
+      - Environment Variables: user-guide/configuration/environment-variables.md
+      - Sample Configurations: user-guide/configuration/samples.md
+    - Subtools:
+      - Overview: user-guide/subtools/overview.md
+      - Build Tools: user-guide/subtools/build-tools.md
+      - Query Tools: user-guide/subtools/query-tools.md
+      - Cache Tools: user-guide/subtools/cache-tools.md
+    - Generators:
+      - CMake: user-guide/generators/cmake.md
+      - Meson: user-guide/generators/meson.md
+      - GN: user-guide/generators/gn.md
+  - Caching:
+    - Overview: caching/overview.md
+    - Local Cache:
+      - How It Works: caching/local/how-it-works.md
+      - Configuration: caching/local/configuration.md
+      - Management: caching/local/management.md
+    - Remote Cache:
+      - Architecture: caching/remote/architecture.md
+      - Quick Setup: caching/remote/quick-setup.md
+      - Server Deployment: caching/remote/deployment.md
+      - Client Configuration: caching/remote/client-config.md
+      - Authentication: caching/remote/authentication.md
+      - Performance Tuning: caching/remote/tuning.md
+    - Cache Modes: caching/cache-modes.md
+    - Troubleshooting: caching/troubleshooting.md
+  - Daemon:
+    - Overview: daemon/overview.md
+    - Auto-Spawn Behavior: daemon/auto-spawn.md
+    - Multi-Repository Support: daemon/multi-repo.md
+    - Management: daemon/management.md
+    - Single-Shot Mode: daemon/single-shot.md
+  - CI/CD Integration:
+    - Overview: ci-cd/overview.md
+    - GitHub Actions: ci-cd/github-actions.md
+    - GitLab CI: ci-cd/gitlab-ci.md
+    - Jenkins: ci-cd/jenkins.md
+    - Docker: ci-cd/docker.md
+    - Kubernetes: ci-cd/kubernetes.md
+    - Best Practices: ci-cd/best-practices.md
+  - Operations:
+    - Overview: operations/overview.md
+    - Monitoring:
+      - Metrics Reference: operations/monitoring/metrics.md
+      - Prometheus Setup: operations/monitoring/prometheus.md
+      - Grafana Dashboards: operations/monitoring/grafana.md
+      - Alerting: operations/monitoring/alerting.md
+    - Maintenance:
+      - Garbage Collection: operations/maintenance/garbage-collection.md
+      - Cache Health: operations/maintenance/cache-health.md
+      - Rolling Restarts: operations/maintenance/rolling-restarts.md
+      - Backup & Recovery: operations/maintenance/backup-recovery.md
+    - Security:
+      - Overview: operations/security/overview.md
+      - Authentication: operations/security/authentication.md
+      - TLS Configuration: operations/security/tls.md
+      - Hardening: operations/security/hardening.md
+  - Performance:
+    - Overview: performance/overview.md
+    - Benchmarks: performance/benchmarks.md
+    - Optimization Guide: performance/optimization.md
+    - Profiling Builds: performance/profiling.md
+    - Estimating Benefits: performance/estimating-benefits.md
+  - Architecture:
+    - Overview: architecture/overview.md
+    - Components:
+      - rninja CLI: architecture/components/cli.md
+      - rninja-daemon: architecture/components/daemon.md
+      - rninja-cached: architecture/components/cached.md
+    - Data Flow: architecture/data-flow.md
+    - Cache Internals:
+      - Hashing Strategy: architecture/cache/hashing.md
+      - Blob Storage: architecture/cache/blob-storage.md
+      - Index Database: architecture/cache/index-database.md
+    - Network Protocol: architecture/network-protocol.md
+    - Drop-in Guarantees: architecture/drop-in-guarantees.md
+  - Reference:
+    - CLI Options: reference/cli-options.md
+    - Configuration Reference: reference/configuration.md
+    - Environment Variables: reference/environment-variables.md
+    - Exit Codes: reference/exit-codes.md
+    - API Reference:
+      - IPC Protocol: reference/api/ipc-protocol.md
+    - File Formats: reference/file-formats.md
+    - Compatibility Matrix: reference/compatibility.md
+  - Troubleshooting:
+    - Common Issues: troubleshooting/common-issues.md
+    - Debug Mode: troubleshooting/debug-mode.md
+    - Diagnostic Commands: troubleshooting/diagnostics.md
+    - FAQ: troubleshooting/faq.md
+  - Contributing:
+    - Contributing Guide: contributing/guide.md
+    - Development Setup: contributing/development-setup.md
+    - Code Style: contributing/code-style.md
+    - Testing: contributing/testing.md
+    - Roadmap: contributing/roadmap.md
+  - Changelog: changelog.md
+  - Tags: tags.md
