@@ -11,11 +11,12 @@ pub use config::{CacheConfig, CacheMode, PullPolicy, PushPolicy, RemoteCacheConf
 pub use entry::CacheEntry;
 pub use remote::{RemoteCacheClient, RemoteCacheError, RemoteClientConfig, WireCacheEntry};
 
-use crate::error::ExecError;
+/// Re-export [`CacheError`] for convenience in cache-related code.
+pub use crate::error::CacheError;
+
 use parking_lot::RwLock;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::path::Path;
+use std::time::{Duration, SystemTime};
 use tracing::{debug, info, warn};
 
 /// Cache statistics
@@ -75,23 +76,21 @@ pub struct Cache {
 }
 
 impl Cache {
-    /// Open or create a cache at the given directory
-    pub fn open(config: CacheConfig) -> Result<Self, ExecError> {
+    /// Open or create a cache at the given directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns `CacheError::CacheDir` if the cache directory cannot be created.
+    /// Returns `CacheError::Database` for sled database errors.
+    /// Returns `CacheError::BlobIo` for blob store initialization errors.
+    pub fn open(config: CacheConfig) -> Result<Self, CacheError> {
         let cache_dir = &config.cache_dir;
         std::fs::create_dir_all(cache_dir).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to create cache dir: {}", e),
-            ))
+            CacheError::CacheDir(format!("failed to create cache dir: {}", e))
         })?;
 
         let db_path = cache_dir.join("index");
-        let db = sled::open(&db_path).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to open cache db: {}", e),
-            ))
-        })?;
+        let db = sled::open(&db_path)?;
 
         let blobs_path = cache_dir.join("blobs");
         let blobs = BlobStore::open(&blobs_path)?;
@@ -165,13 +164,18 @@ impl Cache {
     }
 
     /// Compute the cache key for a build action
+    ///
+    /// # Errors
+    ///
+    /// Returns `CacheError::HashError` if file hashing fails.
     pub fn action_key(
         &self,
         command: &str,
         inputs: &[&Path],
         env_vars: &[(&str, &str)],
-    ) -> Result<String, ExecError> {
+    ) -> Result<String, CacheError> {
         hasher::compute_action_key(command, inputs, env_vars)
+            .map_err(|e| CacheError::HashError(e.to_string()))
     }
 
     /// Look up a cached result (local only)
@@ -299,12 +303,18 @@ impl Cache {
     }
 
     /// Store a build result in the local cache
+    ///
+    /// # Errors
+    ///
+    /// Returns `CacheError::BlobIo` for blob store errors.
+    /// Returns `CacheError::Serialization` for serialization errors.
+    /// Returns `CacheError::Database` for database errors.
     pub fn store_local(
         &self,
         key: &str,
         outputs: &[&Path],
         command: &str,
-    ) -> Result<CacheEntry, ExecError> {
+    ) -> Result<CacheEntry, CacheError> {
         // Store each output in the blob store
         let mut output_hashes = Vec::new();
         for output in outputs {
@@ -322,13 +332,8 @@ impl Cache {
         };
 
         // Serialize and store
-        let data = entry.serialize()?;
-        self.db.insert(key.as_bytes(), data).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to store cache entry: {}", e),
-            ))
-        })?;
+        let data = entry.serialize().map_err(|e| CacheError::Serialization(e.to_string()))?;
+        self.db.insert(key.as_bytes(), data)?;
 
         debug!("Cached result locally for {}", key);
         self.stats.write().stores += 1;
@@ -337,23 +342,31 @@ impl Cache {
     }
 
     /// Store a build result in the cache (sync, local only for compatibility)
+    ///
+    /// # Errors
+    ///
+    /// See [`CacheError`] for possible errors.
     pub fn store(
         &self,
         key: &str,
         outputs: &[&Path],
         command: &str,
-    ) -> Result<(), ExecError> {
+    ) -> Result<(), CacheError> {
         self.store_local(key, outputs, command)?;
         Ok(())
     }
 
     /// Store a build result (async, respects push policy)
+    ///
+    /// # Errors
+    ///
+    /// See [`CacheError`] for possible errors.
     pub async fn store_async(
         &self,
         key: &str,
         outputs: &[&Path],
         command: &str,
-    ) -> Result<(), ExecError> {
+    ) -> Result<(), CacheError> {
         // Always store locally first
         let entry = self.store_local(key, outputs, command)?;
 
@@ -399,8 +412,12 @@ impl Cache {
         }
     }
 
-    /// Restore cached outputs to their original locations
-    pub fn restore(&self, entry: &CacheEntry) -> Result<bool, ExecError> {
+    /// Restore cached outputs to their original locations.
+    ///
+    /// # Errors
+    ///
+    /// Returns `CacheError::BlobIo` for I/O errors during restoration.
+    pub fn restore(&self, entry: &CacheEntry) -> Result<bool, CacheError> {
         for (path, hash) in &entry.outputs {
             if !self.blobs.restore(hash, path)? {
                 debug!("Blob {} not found, cache entry invalid", hash);
@@ -415,10 +432,15 @@ impl Cache {
         self.stats.read().clone()
     }
 
-    /// Run cache garbage collection
-    pub fn gc(&self) -> Result<GcStats, ExecError> {
+    /// Run cache garbage collection.
+    ///
+    /// Removes expired entries based on the configured max_age.
+    ///
+    /// # Errors
+    ///
+    /// Returns `CacheError::BlobIo` for I/O errors during blob scanning.
+    pub fn gc(&self) -> Result<GcStats, CacheError> {
         let mut stats = GcStats::default();
-        let now = SystemTime::now();
 
         // Collect expired entries
         let mut expired_keys = Vec::new();

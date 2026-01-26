@@ -96,7 +96,7 @@ impl ServerConfig {
 }
 
 /// Authentication configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AuthConfig {
     /// Valid authentication tokens
     #[serde(default)]
@@ -105,6 +105,15 @@ pub struct AuthConfig {
     /// Whether authentication is required
     #[serde(default = "default_require_auth")]
     pub require_auth: bool,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            tokens: Vec::new(),
+            require_auth: default_require_auth(),
+        }
+    }
 }
 
 fn default_listen_addr() -> String {

@@ -65,12 +65,12 @@ impl DaemonClient {
             .context("Failed to create NNG socket")?;
 
         // Set timeouts
-        socket
-            .set_opt::<nng::options::RecvTimeout>(Some(Duration::from_millis(CONNECT_TIMEOUT_MS)))
-            .ok();
-        socket
-            .set_opt::<nng::options::SendTimeout>(Some(Duration::from_millis(CONNECT_TIMEOUT_MS)))
-            .ok();
+        if let Err(e) = socket.set_opt::<nng::options::RecvTimeout>(Some(Duration::from_millis(CONNECT_TIMEOUT_MS))) {
+            tracing::warn!("Failed to set receive timeout: {}", e);
+        }
+        if let Err(e) = socket.set_opt::<nng::options::SendTimeout>(Some(Duration::from_millis(CONNECT_TIMEOUT_MS))) {
+            tracing::warn!("Failed to set send timeout: {}", e);
+        }
 
         let url = format!("ipc://{}", self.socket_path.display());
         socket.dial(&url).context("Failed to connect to daemon")?;
@@ -119,7 +119,9 @@ impl DaemonClient {
                     conn.verify_version()?;
                     return Ok(conn);
                 }
-                Err(_) => {
+                Err(e) => {
+                    let attempt = (start.elapsed().as_millis() / u128::from(CONNECT_RETRY_INTERVAL_MS)) as u64;
+                    debug!("Waiting for daemon (attempt {}): {}", attempt, e);
                     std::thread::sleep(Duration::from_millis(CONNECT_RETRY_INTERVAL_MS));
                 }
             }

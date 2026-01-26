@@ -98,7 +98,10 @@ impl<'a> Parser<'a> {
             if !line.starts_with(' ') && !line.starts_with('\t') {
                 break;
             }
-            let line = self.lexer.next_line().unwrap();
+            let line = self.lexer.next_line().ok_or_else(|| ParseError::Syntax {
+                line: self.current_line,
+                message: "unexpected end of file while parsing rule".to_string(),
+            })?;
             self.current_line = self.lexer.line_number();
 
             let line = line.trim();
@@ -186,7 +189,10 @@ impl<'a> Parser<'a> {
             if !line.starts_with(' ') && !line.starts_with('\t') {
                 break;
             }
-            let line = self.lexer.next_line().unwrap();
+            let line = self.lexer.next_line().ok_or_else(|| ParseError::Syntax {
+                line: self.current_line,
+                message: "unexpected end of file while parsing build".to_string(),
+            })?;
             self.current_line = self.lexer.line_number();
 
             let line = line.trim();
@@ -223,7 +229,10 @@ impl<'a> Parser<'a> {
             if !line.starts_with(' ') && !line.starts_with('\t') {
                 break;
             }
-            let line = self.lexer.next_line().unwrap();
+            let line = self.lexer.next_line().ok_or_else(|| ParseError::Syntax {
+                line: self.current_line,
+                message: "unexpected end of file while parsing pool".to_string(),
+            })?;
             self.current_line = self.lexer.line_number();
 
             let line = line.trim();
@@ -338,7 +347,10 @@ impl<'a> Parser<'a> {
     }
 
     fn expand_path(&self, path: &str) -> String {
-        // Handle $var and ${var} expansion
+        // Handle $var and ${var} expansion for path variables
+        // Note: Full variable expansion (including $in, $out, etc.) happens later
+        // in the graph construction phase. This only expands manifest-level
+        // global variables for path components.
         let mut result = path.to_string();
         for (key, value) in &self.manifest.variables {
             result = result.replace(&format!("${}", key), value);

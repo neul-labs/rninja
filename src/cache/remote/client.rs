@@ -124,6 +124,25 @@ impl ClientStats {
     }
 }
 
+/// Validates that a hash contains only safe characters for use in cache operations.
+///
+/// Cache hashes are hex-encoded blake3 output, so they should only contain
+/// ASCII hexadecimal characters.
+fn is_valid_cache_hash(hash: &str) -> bool {
+    !hash.is_empty() && hash.len() >= 32 && hash.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Validates all hashes in a slice, returning the first invalid hash if any.
+fn validate_cache_hashes(hashes: &[impl AsRef<str>]) -> Option<String> {
+    for hash in hashes {
+        let h = hash.as_ref();
+        if h.len() < 32 || !h.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Some(h.to_string());
+        }
+    }
+    None
+}
+
 /// Remote cache client
 pub struct RemoteCacheClient {
     config: RemoteClientConfig,
@@ -343,6 +362,14 @@ impl RemoteCacheClient {
 
     /// Lookup a cache entry
     pub async fn lookup(&self, key: &str) -> Result<Option<WireCacheEntry>, RemoteCacheError> {
+        // Validate hash to prevent potential injection attacks
+        if !is_valid_cache_hash(key) {
+            warn!("Invalid cache key received: {}", key);
+            return Err(RemoteCacheError::InvalidResponse(
+                "invalid cache key format".into(),
+            ));
+        }
+
         let request = Request::Lookup {
             key: key.to_string(),
         };
@@ -367,10 +394,18 @@ impl RemoteCacheClient {
     pub async fn pull_blobs(
         &self,
         hashes: &[String],
-        blob_store: &BlobStore,
+        _blob_store: &BlobStore,
     ) -> Result<(), RemoteCacheError> {
         if hashes.is_empty() {
             return Ok(());
+        }
+
+        // Validate all hashes before sending request
+        if let Some(invalid) = validate_cache_hashes(hashes) {
+            warn!("Invalid hash in pull request: {}", invalid);
+            return Err(RemoteCacheError::InvalidResponse(
+                "invalid hash format".into(),
+            ));
         }
 
         let request = Request::PullBlobs {
@@ -416,6 +451,14 @@ impl RemoteCacheClient {
 
     /// Push a blob to the server
     pub async fn push_blob(&self, hash: &str, data: &[u8]) -> Result<(), RemoteCacheError> {
+        // Validate hash before sending data
+        if !is_valid_cache_hash(hash) {
+            warn!("Invalid hash in push request: {}", hash);
+            return Err(RemoteCacheError::InvalidResponse(
+                "invalid hash format".into(),
+            ));
+        }
+
         let total = data.len() as u64;
         let mut offset = 0u64;
 

@@ -43,11 +43,16 @@ fn parse_content(content: &str) -> io::Result<DepfileResult> {
                 // Escape sequence
                 if let Some(&next) = chars.peek() {
                     if next == ' ' || next == '#' || next == '\\' {
-                        current.push(chars.next().unwrap());
+                        // Safe to unwrap here since we just peeked
+                        if let Some(escaped) = chars.next() {
+                            current.push(escaped);
+                        }
                     } else {
                         current.push(c);
                     }
                 }
+                // If chars.peek() returns None, the backslash is at end of input
+                // We just skip it (treat as literal backslash)
             }
             ' ' | '\t' | '\n' | '\r' => {
                 if !current.is_empty() {

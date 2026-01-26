@@ -277,8 +277,27 @@ pub fn get_default_socket_path() -> PathBuf {
     }
 
     // Fall back to /tmp/rninja-{uid}
-    let uid = unsafe { libc::getuid() };
+    let uid = get_effective_uid();
     PathBuf::from(format!("/tmp/rninja-{}", uid)).join(DEFAULT_SOCKET_NAME)
+}
+
+/// Get the effective user ID (platform-specific)
+#[cfg(unix)]
+fn get_effective_uid() -> u32 {
+    // SAFETY: getuid() is a standard POSIX function that reads process state
+    // and does not modify any memory or interact with the system in unsafe ways.
+    unsafe { libc::getuid() as u32 }
+}
+
+#[cfg(not(unix))]
+fn get_effective_uid() -> u32 {
+    // On non-Unix platforms, use a hash of the temp dir as a surrogate
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let temp_dir = std::env::temp_dir().to_string_lossy();
+    let mut hasher = DefaultHasher::new();
+    temp_dir.hash(&mut hasher);
+    hasher.finish() as u32
 }
 
 /// Generate a unique session ID

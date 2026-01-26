@@ -329,10 +329,20 @@ impl Graph {
     }
 
     /// Expand variables in a string
+    ///
+    /// Variable expansion order (later sources override earlier ones):
+    /// 1. Built-in variables ($in, $out, $in_newline, $first_input, $first_output)
+    /// 2. Build-specific variables (from build.ninja build statements)
+    /// 3. Rule variables (from rule definitions in build.ninja)
+    /// 4. Global variables (from top-level assignments in build.ninja)
+    /// 5. Escape sequences ($$ -> $, $space, $:)
+    ///
+    /// Note: Expansion is single-pass. Variable values containing $var references
+    /// will not be recursively expanded. Use unique variable names to avoid conflicts.
     fn expand_var(&self, s: &str, build: &Build, rule: Option<&Rule>) -> String {
         let mut result = s.to_string();
 
-        // Built-in variables
+        // 1. Built-in variables
         let in_str = build.inputs.join(" ");
         let out_str = build.outputs.join(" ");
         let in_first = build.inputs.first().map(|s| s.as_str()).unwrap_or("");
@@ -346,13 +356,13 @@ impl Graph {
         result = result.replace("$first_input", in_first);
         result = result.replace("$first_output", out_first);
 
-        // Build-specific variables
+        // 2. Build-specific variables (highest priority - can override rule/global vars)
         for (key, value) in &build.variables {
             result = result.replace(&format!("${}", key), value);
             result = result.replace(&format!("${{{}}}", key), value);
         }
 
-        // Rule variables
+        // 3. Rule variables
         if let Some(rule) = rule {
             for (key, value) in &rule.variables {
                 result = result.replace(&format!("${}", key), value);
@@ -360,13 +370,13 @@ impl Graph {
             }
         }
 
-        // Global variables
+        // 4. Global variables (lowest priority custom variables)
         for (key, value) in &self.variables {
             result = result.replace(&format!("${}", key), value);
             result = result.replace(&format!("${{{}}}", key), value);
         }
 
-        // Escape sequences
+        // 5. Escape sequences (processed last)
         result = result.replace("$$", "$");
         result = result.replace("$ ", " ");
         result = result.replace("$:", ":");
