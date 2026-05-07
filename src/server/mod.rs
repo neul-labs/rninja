@@ -11,9 +11,7 @@ pub use handler::CacheServer;
 
 use crate::cache::remote::protocol::PROTOCOL_VERSION;
 use crate::error::ExecError;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::Instant;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::info;
 
 /// Server statistics

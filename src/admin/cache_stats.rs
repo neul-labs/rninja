@@ -3,7 +3,6 @@
 use crate::cache::{CacheConfig, CacheEntry};
 use crate::error::ExecError;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
 /// Cache statistics report
@@ -40,7 +39,7 @@ pub struct EntryBucket {
 }
 
 /// Run the cache-stats tool
-pub fn run_cache_stats(verbose: bool, json: bool) -> Result<(), ExecError> {
+pub fn run_cache_stats(_verbose: bool, json: bool) -> Result<(), ExecError> {
     let config = CacheConfig::from_env();
 
     if !config.cache_dir.exists() {
@@ -55,9 +54,7 @@ pub fn run_cache_stats(verbose: bool, json: bool) -> Result<(), ExecError> {
     // Open sled database
     let db_path = config.cache_dir.join("index");
     let db = sled::open(&db_path).map_err(|e| {
-        ExecError::SpawnError(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("failed to open cache db: {}", e),
+        ExecError::SpawnError(std::io::Error::other(format!("failed to open cache db: {}", e),
         ))
     })?;
 
@@ -81,32 +78,37 @@ pub fn run_cache_stats(verbose: bool, json: bool) -> Result<(), ExecError> {
 
     // Analyze age distribution
     let now = SystemTime::now();
-    for item in db.iter() {
-        if let Ok((_, value)) = item {
-            if let Ok(entry) = CacheEntry::deserialize(&value) {
-                let age = now.duration_since(entry.created).unwrap_or_default();
-                let size = value.len() as u64;
+    for (_, value) in db.iter().flatten() {
+        if let Ok(entry) = CacheEntry::deserialize(&value) {
+            let age = now.duration_since(entry.created).unwrap_or_default();
+            let size = value.len() as u64;
 
-                if age < Duration::from_secs(3600) {
-                    report.age_distribution.under_1h.count += 1;
-                    report.age_distribution.under_1h.size_bytes += size;
-                } else if age < Duration::from_secs(86400) {
-                    report.age_distribution.under_1d.count += 1;
-                    report.age_distribution.under_1d.size_bytes += size;
-                } else if age < Duration::from_secs(604800) {
-                    report.age_distribution.under_1w.count += 1;
-                    report.age_distribution.under_1w.size_bytes += size;
-                } else {
-                    report.age_distribution.over_1w.count += 1;
-                    report.age_distribution.over_1w.size_bytes += size;
-                }
+            if age < Duration::from_secs(3600) {
+                report.age_distribution.under_1h.count += 1;
+                report.age_distribution.under_1h.size_bytes += size;
+            } else if age < Duration::from_secs(86400) {
+                report.age_distribution.under_1d.count += 1;
+                report.age_distribution.under_1d.size_bytes += size;
+            } else if age < Duration::from_secs(604800) {
+                report.age_distribution.under_1w.count += 1;
+                report.age_distribution.under_1w.size_bytes += size;
+            } else {
+                report.age_distribution.over_1w.count += 1;
+                report.age_distribution.over_1w.size_bytes += size;
             }
         }
     }
 
     // Output
     if json {
-        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        match serde_json::to_string_pretty(&report) {
+            Ok(s) => println!("{}", s),
+            Err(e) => {
+                eprintln!("Error serializing cache stats report: {}", e);
+                return Err(ExecError::SpawnError(std::io::Error::other(format!("serialization error: {}", e),
+                )));
+            }
+        }
     } else {
         print_human_readable(&report);
     }

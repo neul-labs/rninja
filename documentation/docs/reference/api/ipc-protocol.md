@@ -155,7 +155,7 @@ Messages use MessagePack serialization over a length-prefixed framing.
 {
   "type": "status_response",
   "id": "uuid",
-  "daemon_version": "0.1.0",
+  "daemon_version": "0.1.1",
   "uptime_seconds": 3600,
   "active_builds": 2,
   "total_builds": 150,

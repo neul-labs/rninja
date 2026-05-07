@@ -1,8 +1,3 @@
----
-title: Changelog
-description: Version history and release notes
----
-
 # Changelog
 
 All notable changes to this project will be documented in this file.

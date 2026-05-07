@@ -24,6 +24,7 @@ const CONNECT_RETRY_INTERVAL_MS: u64 = 100;
 /// Client for communicating with the rninja daemon
 pub struct DaemonClient {
     socket_path: PathBuf,
+    #[allow(dead_code)]
     socket: Option<nng::Socket>,
 }
 

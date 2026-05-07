@@ -1,9 +1,11 @@
 /// Simple line-based lexer for ninja files
 pub struct Lexer<'a> {
+    #[allow(dead_code)]
     content: &'a str,
     lines: std::iter::Peekable<std::str::Lines<'a>>,
     line_number: usize,
     /// Buffer for line continuation
+    #[allow(dead_code)]
     continued_line: Option<String>,
 }
 

@@ -17,12 +17,13 @@ rninja can be installed on Linux, macOS, and Windows. Choose the installation me
 
 ## Installation Methods
 
-### From Crates.io (Recommended)
+### Homebrew (macOS & Linux)
 
-The simplest way to install rninja is via Cargo:
+The easiest way to install rninja on macOS and Linux is via Homebrew:
 
 ```bash
-cargo install rninja
+brew tap neul-labs/tap
+brew install rninja
 ```
 
 This installs the following binaries:
@@ -32,6 +33,46 @@ This installs the following binaries:
 | `rninja` | Main CLI (drop-in Ninja replacement) |
 | `rninja-daemon` | Build daemon for faster subsequent builds |
 | `rninja-cached` | Remote cache server |
+
+### NPM
+
+You can install rninja globally via npm:
+
+```bash
+npm install -g rninja
+```
+
+The npm package downloads the correct prebuilt binary for your platform automatically.
+
+### PyPI
+
+You can install rninja via pip:
+
+```bash
+pip install rninja
+```
+
+The PyPI package downloads the correct prebuilt binary for your platform on first use.
+
+### Snap Store (Linux)
+
+On Linux distributions with snap support:
+
+```bash
+sudo snap install rninja
+```
+
+### From Crates.io
+
+Install via Cargo:
+
+```bash
+cargo install rninja
+```
+
+### From GitHub Releases
+
+Download prebuilt binaries for your platform from the [Releases page](https://github.com/neul-labs/rninja/releases).
 
 ### From Source
 
@@ -67,7 +108,7 @@ rninja --version
 Expected output:
 
 ```
-rninja 0.1.0
+rninja 0.1.1
 ```
 
 List available subtools:

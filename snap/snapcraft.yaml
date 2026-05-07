@@ -1,0 +1,32 @@
+name: rninja
+adopt-info: rninja
+summary: Drop-in replacement for Ninja with caching and improved scheduling
+description: |
+  rninja is a Rust-powered drop-in replacement for the Ninja build system
+  with built-in content-addressed caching and modern async scheduling.
+grade: stable
+confinement: strict
+base: core22
+
+parts:
+  rninja:
+    plugin: rust
+    source: .
+    override-build: |
+      craftctl default
+      install -D -m755 target/release/rninja $CRAFT_PART_INSTALL/bin/rninja
+      install -D -m755 target/release/rninja-cached $CRAFT_PART_INSTALL/bin/rninja-cached
+      install -D -m755 target/release/rninja-daemon $CRAFT_PART_INSTALL/bin/rninja-daemon
+    parse-info: [Cargo.toml]
+
+apps:
+  rninja:
+    command: bin/rninja
+    plugs: [home, removable-media]
+  rninja-cached:
+    command: bin/rninja-cached
+    plugs: [home, removable-media]
+  rninja-daemon:
+    command: bin/rninja-daemon
+    daemon: simple
+    plugs: [home, network-bind]

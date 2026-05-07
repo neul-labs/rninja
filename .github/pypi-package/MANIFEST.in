@@ -1,0 +1,2 @@
+include rninja/cli.py
+include rninja/__init__.py

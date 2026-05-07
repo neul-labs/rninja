@@ -22,6 +22,7 @@ pub struct Graph {
     /// All nodes indexed by output path
     nodes: HashMap<String, Node>,
     /// Rules from the manifest
+    #[allow(dead_code)]
     rules: HashMap<String, Rule>,
     /// Global variables for expansion
     variables: HashMap<String, String>,

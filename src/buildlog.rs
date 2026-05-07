@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 use tracing::warn;
 
@@ -28,7 +29,7 @@ pub struct LogEntry {
 pub struct BuildLog {
     path: PathBuf,
     entries: HashMap<String, LogEntry>,
-    dirty: bool,
+    dirty: AtomicBool,
 }
 
 impl BuildLog {
@@ -38,7 +39,7 @@ impl BuildLog {
         let mut log = Self {
             path,
             entries: HashMap::new(),
-            dirty: false,
+            dirty: AtomicBool::new(false),
         };
         log.load();
         log
@@ -106,7 +107,7 @@ impl BuildLog {
                 command_hash,
             },
         );
-        self.dirty = true;
+        self.dirty.store(true, Ordering::Relaxed);
     }
 
     /// Get recorded mtime for an output
@@ -121,7 +122,7 @@ impl BuildLog {
 
     /// Save log to disk
     pub fn save(&self) -> std::io::Result<()> {
-        if !self.dirty && self.path.exists() {
+        if !self.dirty.load(Ordering::Relaxed) && self.path.exists() {
             return Ok(());
         }
 
@@ -145,6 +146,7 @@ impl BuildLog {
             )?;
         }
 
+        self.dirty.store(false, Ordering::Relaxed);
         Ok(())
     }
 

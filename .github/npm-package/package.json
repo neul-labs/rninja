@@ -1,18 +1,22 @@
 {
   "name": "rninja",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A drop-in replacement for Ninja build system with caching and improved scheduling",
-  "main": "bin/rninja.js",
+  "main": "bin/rninja",
   "bin": {
-    "rninja": "bin/rninja.js",
-    "rninja-cached": "bin/rninja-cached.js"
+    "rninja": "bin/rninja",
+    "rninja-cached": "bin/rninja-cached",
+    "rninja-daemon": "bin/rninja-daemon"
   },
+  "files": [
+    "bin/"
+  ],
   "scripts": {
     "install": "node bin/install.js"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/dipankarsarkar/rninja"
+    "url": "https://github.com/neul-labs/rninja"
   },
   "keywords": [
     "build",

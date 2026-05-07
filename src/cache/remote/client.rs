@@ -5,7 +5,7 @@
 use super::error::RemoteCacheError;
 use super::protocol::{
     deserialize_response, serialize_request, Request, RequestEnvelope, Response, WireCacheEntry,
-    DEFAULT_CHUNK_SIZE, PROTOCOL_VERSION,
+    DEFAULT_CHUNK_SIZE,
 };
 use crate::cache::blob::BlobStore;
 use nng::options::Options;
@@ -143,13 +143,75 @@ fn validate_cache_hashes(hashes: &[impl AsRef<str>]) -> Option<String> {
     None
 }
 
+/// State of the remote cache connection
+#[derive(Debug)]
+enum ConnectionState {
+    Disconnected,
+    Connecting,
+    Connected { socket: nng::Socket },
+}
+
+/// Error returned when an invalid connection state transition is attempted
+#[derive(Debug)]
+struct InvalidConnectionTransition {
+    from: &'static str,
+    to: &'static str,
+}
+
+impl std::fmt::Display for InvalidConnectionTransition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid connection state transition: {} -> {}",
+            self.from, self.to
+        )
+    }
+}
+
+impl ConnectionState {
+    fn transition(
+        &self,
+        to: ConnectionState,
+    ) -> Result<ConnectionState, InvalidConnectionTransition> {
+        let valid = match (self, &to) {
+            (ConnectionState::Disconnected, ConnectionState::Connecting) => true,
+            (ConnectionState::Connecting, ConnectionState::Connected { .. }) => true,
+            (ConnectionState::Connecting, ConnectionState::Disconnected) => true,
+            (ConnectionState::Connected { .. }, ConnectionState::Disconnected) => true,
+            (from, to) if std::mem::discriminant(from) == std::mem::discriminant(to) => {
+                true
+            }
+            _ => false,
+        };
+        if valid {
+            Ok(to)
+        } else {
+            Err(InvalidConnectionTransition {
+                from: self.name(),
+                to: to.name(),
+            })
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            ConnectionState::Disconnected => "Disconnected",
+            ConnectionState::Connecting => "Connecting",
+            ConnectionState::Connected { .. } => "Connected",
+        }
+    }
+
+    fn is_connected(&self) -> bool {
+        matches!(self, ConnectionState::Connected { .. })
+    }
+}
+
 /// Remote cache client
 pub struct RemoteCacheClient {
     config: RemoteClientConfig,
-    socket: RwLock<Option<nng::Socket>>,
+    connection: RwLock<ConnectionState>,
     semaphore: Arc<Semaphore>,
     stats: Arc<ClientStats>,
-    connected: std::sync::atomic::AtomicBool,
 }
 
 impl RemoteCacheClient {
@@ -171,15 +233,49 @@ impl RemoteCacheClient {
 
         Ok(Self {
             config,
-            socket: RwLock::new(None),
+            connection: RwLock::new(ConnectionState::Disconnected),
             semaphore,
             stats,
-            connected: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
     /// Connect to the remote cache server
     pub async fn connect(&self) -> Result<(), RemoteCacheError> {
+        // Validate and transition to Connecting
+        {
+            let mut guard = self.connection.write();
+            match (*guard).transition(ConnectionState::Connecting) {
+                Ok(new) => *guard = new,
+                Err(e) => {
+                    return Err(RemoteCacheError::ConfigError(format!(
+                        "connection state error: {}",
+                        e
+                    )));
+                }
+            }
+        }
+
+        let result = self.connect_inner().await;
+
+        // Transition out of Connecting on completion
+        {
+            let mut guard = self.connection.write();
+            match &result {
+                Ok(()) => {
+                    // The inner connect has already set Connected state
+                }
+                Err(_) => {
+                    if let Ok(new) = (*guard).transition(ConnectionState::Disconnected) {
+                        *guard = new;
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    async fn connect_inner(&self) -> Result<(), RemoteCacheError> {
         let socket = nng::Socket::new(nng::Protocol::Req0)?;
 
         // Set timeouts
@@ -190,32 +286,46 @@ impl RemoteCacheClient {
             .set_opt::<nng::options::RecvTimeout>(Some(self.config.request_timeout))
             .map_err(|e| RemoteCacheError::ConfigError(format!("failed to set recv timeout: {}", e)))?;
 
-        // Connect with timeout
-        let addr = &self.config.server_addr;
+        // Connect with timeout (blocking call offloaded to spawn_blocking)
+        let addr = self.config.server_addr.clone();
         debug!("Connecting to remote cache at {}", addr);
 
-        tokio::time::timeout(self.config.connect_timeout, async {
-            socket
-                .dial(addr)
-                .map_err(|e| RemoteCacheError::ConnectionFailed(e.to_string()))
+        let socket = tokio::time::timeout(self.config.connect_timeout, async {
+            tokio::task::spawn_blocking(move || {
+                socket.dial(&addr).map_err(|e| {
+                    RemoteCacheError::ConnectionFailed(e.to_string())
+                })?;
+                Ok::<_, RemoteCacheError>(socket)
+            })
+            .await
+            .map_err(|e| RemoteCacheError::ConnectionFailed(format!("blocking task panicked: {}", e)))?
         })
         .await
         .map_err(|_| RemoteCacheError::ConnectionTimeout(self.config.connect_timeout.as_millis() as u64))??;
 
-        // Verify connection with ping
+        // Verify connection with ping before declaring Connected
         {
-            let mut guard = self.socket.write();
-            *guard = Some(socket);
+            let mut guard = self.connection.write();
+            match (*guard).transition(ConnectionState::Connected {
+                socket: socket.clone(),
+            }) {
+                Ok(new) => *guard = new,
+                Err(e) => {
+                    return Err(RemoteCacheError::ConfigError(format!(
+                        "connection state error: {}",
+                        e
+                    )));
+                }
+            }
         }
 
         match self.ping().await {
             Ok(version) => {
                 info!("Connected to remote cache server (version: {})", version);
-                self.connected.store(true, Ordering::SeqCst);
                 Ok(())
             }
             Err(e) => {
-                self.socket.write().take();
+                self.disconnect();
                 Err(e)
             }
         }
@@ -223,7 +333,7 @@ impl RemoteCacheClient {
 
     /// Check if connected
     pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::SeqCst)
+        self.connection.read().is_connected()
     }
 
     /// Get client statistics
@@ -263,14 +373,23 @@ impl RemoteCacheClient {
         let request_bytes = serialize_request(&envelope)?;
         let start = Instant::now();
 
-        let response_bytes = {
-            let guard = self.socket.read();
-            let socket = guard
-                .as_ref()
-                .ok_or_else(|| RemoteCacheError::ConnectionFailed("not connected".into()))?;
+        // Extract socket while holding the lock, then perform blocking I/O off-thread
+        let socket = {
+            let guard = self.connection.read();
+            match &*guard {
+                ConnectionState::Connected { socket } => socket.clone(),
+                _ => {
+                    return Err(RemoteCacheError::ConnectionFailed(
+                        "not connected".into(),
+                    ));
+                }
+            }
+        };
 
+        let request_bytes_clone = request_bytes.clone();
+        let response_bytes = tokio::task::spawn_blocking(move || {
             // Send request
-            let msg = nng::Message::from(request_bytes.as_slice());
+            let msg = nng::Message::from(request_bytes_clone.as_slice());
             socket
                 .send(msg)
                 .map_err(|e| RemoteCacheError::NetworkError(format!("send failed: {:?}", e)))?;
@@ -280,8 +399,10 @@ impl RemoteCacheClient {
                 .recv()
                 .map_err(|e| RemoteCacheError::NetworkError(format!("recv failed: {:?}", e)))?;
 
-            response_msg.as_slice().to_vec()
-        };
+            Ok::<_, RemoteCacheError>(response_msg.as_slice().to_vec())
+        })
+        .await
+        .map_err(|e| RemoteCacheError::NetworkError(format!("blocking task panicked: {}", e)))??;
 
         let latency = start.elapsed();
         self.stats
@@ -523,8 +644,10 @@ impl RemoteCacheClient {
 
     /// Disconnect from the server
     pub fn disconnect(&self) {
-        self.socket.write().take();
-        self.connected.store(false, Ordering::SeqCst);
+        let mut guard = self.connection.write();
+        if let Ok(new) = (*guard).transition(ConnectionState::Disconnected) {
+            *guard = new;
+        }
     }
 }
 

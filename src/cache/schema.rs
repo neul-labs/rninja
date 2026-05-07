@@ -44,9 +44,7 @@ impl SchemaInfo {
     /// Serialize to bytes
     pub fn serialize(&self) -> Result<Vec<u8>, ExecError> {
         serde_json::to_vec(self).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to serialize schema info: {}", e),
+            ExecError::SpawnError(std::io::Error::other(format!("failed to serialize schema info: {}", e),
             ))
         })
     }
@@ -54,9 +52,7 @@ impl SchemaInfo {
     /// Deserialize from bytes
     pub fn deserialize(data: &[u8]) -> Result<Self, ExecError> {
         serde_json::from_slice(data).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to deserialize schema info: {}", e),
+            ExecError::SpawnError(std::io::Error::other(format!("failed to deserialize schema info: {}", e),
             ))
         })
     }
@@ -100,26 +96,19 @@ pub fn check_and_migrate(db: &sled::Db, auto_migrate: bool) -> Result<SchemaInfo
                     };
 
                     db.insert(SCHEMA_KEY, new_info.serialize()?).map_err(|e| {
-                        ExecError::SpawnError(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("failed to update schema: {}", e),
+                        ExecError::SpawnError(std::io::Error::other(format!("failed to update schema: {}", e),
                         ))
                     })?;
 
                     Ok(new_info)
                 } else {
-                    Err(ExecError::SpawnError(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
+                    Err(ExecError::SpawnError(std::io::Error::other(format!(
                             "cache schema migration required: v{} -> v{}. Run with auto_migrate or use cache-migrate tool",
-                            info.version, CURRENT_SCHEMA_VERSION
-                        ),
+                            info.version, CURRENT_SCHEMA_VERSION),
                     )))
                 }
             } else if info.version > CURRENT_SCHEMA_VERSION {
-                Err(ExecError::SpawnError(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
+                Err(ExecError::SpawnError(std::io::Error::other(format!(
                         "cache was created by newer rninja (schema v{}), current version supports v{}",
                         info.version, CURRENT_SCHEMA_VERSION
                     ),
@@ -132,23 +121,19 @@ pub fn check_and_migrate(db: &sled::Db, auto_migrate: bool) -> Result<SchemaInfo
             // New database - initialize schema
             let info = SchemaInfo::current();
             db.insert(SCHEMA_KEY, info.serialize()?).map_err(|e| {
-                ExecError::SpawnError(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("failed to initialize schema: {}", e),
+                ExecError::SpawnError(std::io::Error::other(format!("failed to initialize schema: {}", e),
                 ))
             })?;
             tracing::info!("Initialized cache schema v{}", CURRENT_SCHEMA_VERSION);
             Ok(info)
         }
-        Err(e) => Err(ExecError::SpawnError(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("failed to read schema: {}", e),
+        Err(e) => Err(ExecError::SpawnError(std::io::Error::other(format!("failed to read schema: {}", e),
         ))),
     }
 }
 
 /// Run migrations from one version to current
-fn migrate(db: &sled::Db, from_version: u32) -> Result<MigrationStats, ExecError> {
+fn migrate(_db: &sled::Db, _from_version: u32) -> Result<MigrationStats, ExecError> {
     let mut stats = MigrationStats::default();
     let start = std::time::Instant::now();
 
@@ -190,6 +175,6 @@ mod tests {
 
     #[test]
     fn test_schema_version() {
-        assert!(CURRENT_SCHEMA_VERSION >= 1);
+        const { assert!(CURRENT_SCHEMA_VERSION >= 1) }
     }
 }

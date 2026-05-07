@@ -444,18 +444,16 @@ impl Cache {
 
         // Collect expired entries
         let mut expired_keys = Vec::new();
-        for item in self.db.iter() {
-            if let Ok((key, value)) = item {
-                if let Ok(entry) = CacheEntry::deserialize(&value) {
-                    let should_remove = if let Some(max_age) = self.config.max_age {
-                        entry.created.elapsed().map(|e| e > max_age).unwrap_or(false)
-                    } else {
-                        false
-                    };
+        for (key, value) in self.db.iter().flatten() {
+            if let Ok(entry) = CacheEntry::deserialize(&value) {
+                let should_remove = if let Some(max_age) = self.config.max_age {
+                    entry.created.elapsed().map(|e| e > max_age).unwrap_or(false)
+                } else {
+                    false
+                };
 
-                    if should_remove {
-                        expired_keys.push(key.to_vec());
-                    }
+                if should_remove {
+                    expired_keys.push(key.to_vec());
                 }
             }
         }

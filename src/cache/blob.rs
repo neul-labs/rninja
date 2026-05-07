@@ -76,7 +76,6 @@ impl BlobStore {
         // Copy file permissions
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
             if let Ok(meta) = path.metadata() {
                 let _ = fs::set_permissions(&blob_path, meta.permissions());
             }

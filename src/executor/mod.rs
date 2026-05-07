@@ -1,7 +1,7 @@
 mod depfile;
 mod runner;
 
-use crate::cache::{Cache, CacheConfig, CacheEntry};
+use crate::cache::{Cache, CacheConfig};
 use crate::error::ExecError;
 use crate::graph::{Graph, Node};
 use crate::output::{JsonEvent, OutputMode};
@@ -16,6 +16,21 @@ use std::time::{Duration, Instant};
 use tokio::process::Command;
 use tokio::sync::Semaphore;
 use tracing::{debug, info};
+
+/// Collect environment variables that commonly affect build outputs.
+///
+/// This whitelist covers the most common compiler and linker environment
+/// variables. A full implementation may need to be configurable per-project.
+fn collect_relevant_env_vars() -> Vec<(&'static str, String)> {
+    const KEYS: [&str; 12] = [
+        "CC", "CXX", "LD", "AR", "RANLIB", "STRIP",
+        "CFLAGS", "CXXFLAGS", "LDFLAGS", "CPPFLAGS",
+        "RUSTFLAGS", "PATH",
+    ];
+    KEYS.iter()
+        .filter_map(|&k| std::env::var(k).ok().map(|v| (k, v)))
+        .collect()
+}
 
 /// Executor configuration
 #[derive(Debug, Clone)]
@@ -103,9 +118,54 @@ impl Stats {
 /// Tracks the current state of a build node
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 enum NodeState {
+    /// Waiting for dependencies
     Pending,
+    /// Dependencies satisfied, waiting for semaphore
+    Ready,
+    /// Actively executing
+    Running,
+    /// Successfully completed
     Completed,
+    /// Command failed
     Failed,
+    /// Skipped because a dependency failed or build was cancelled
+    Cancelled,
+}
+
+/// Error returned when an invalid state transition is attempted
+#[derive(Debug)]
+struct InvalidTransition {
+    from: NodeState,
+    to: NodeState,
+}
+
+impl std::fmt::Display for InvalidTransition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid node state transition: {:?} -> {:?}", self.from, self.to)
+    }
+}
+
+impl NodeState {
+    /// Attempt to transition from `self` to `new`, returning `Err` if invalid.
+    fn transition(self, new: NodeState) -> Result<NodeState, InvalidTransition> {
+        match (self, new) {
+            // From Pending
+            (NodeState::Pending, NodeState::Ready)
+            | (NodeState::Pending, NodeState::Running)
+            | (NodeState::Pending, NodeState::Cancelled) => Ok(new),
+            // From Ready
+            (NodeState::Ready, NodeState::Running)
+            | (NodeState::Ready, NodeState::Cancelled) => Ok(new),
+            // From Running
+            (NodeState::Running, NodeState::Completed)
+            | (NodeState::Running, NodeState::Failed)
+            | (NodeState::Running, NodeState::Cancelled) => Ok(new),
+            // Same state is idempotent
+            (old, new) if old == new => Ok(new),
+            // All other combinations are invalid
+            (from, to) => Err(InvalidTransition { from, to }),
+        }
+    }
 }
 
 /// Shared state for parallel execution
@@ -162,49 +222,60 @@ impl BuildState {
         }
     }
 
-    fn mark_completed(&self, path: &str) {
+    fn apply_transition(&self, path: &str, new: NodeState) {
         let mut states = self.node_states.lock();
-        // Only mark as completed if not already in a terminal state
-        match states.get(path).copied() {
-            None | Some(NodeState::Pending) => {
-                states.insert(path.to_string(), NodeState::Completed);
+        let current = states.get(path).copied().unwrap_or(NodeState::Pending);
+        match current.transition(new) {
+            Ok(NodeState::Failed) if current != NodeState::Failed => {
+                states.insert(path.to_string(), NodeState::Failed);
+                self.fail_count.fetch_add(1, Ordering::SeqCst);
             }
-            Some(NodeState::Failed) => {
-                // Already failed, don't change state
+            Ok(final_state) => {
+                states.insert(path.to_string(), final_state);
             }
-            Some(NodeState::Completed) => {
-                // Already completed, no-op
+            Err(e) => {
+                tracing::warn!("State transition error for {}: {}", path, e);
             }
         }
     }
 
+    fn mark_ready(&self, path: &str) {
+        self.apply_transition(path, NodeState::Ready);
+    }
+
+    fn mark_running(&self, path: &str) {
+        self.apply_transition(path, NodeState::Running);
+    }
+
+    fn mark_completed(&self, path: &str) {
+        self.apply_transition(path, NodeState::Completed);
+    }
+
     fn mark_failed(&self, path: &str) {
-        let mut states = self.node_states.lock();
-        // Only mark as failed if not already completed
-        match states.get(path).copied() {
-            None | Some(NodeState::Pending) => {
-                states.insert(path.to_string(), NodeState::Failed);
-                self.fail_count.fetch_add(1, Ordering::SeqCst);
-            }
-            Some(NodeState::Completed) => {
-                // Already completed, don't count as failure
-            }
-            Some(NodeState::Failed) => {
-                // Already failed, don't double-count
-            }
-        }
+        self.apply_transition(path, NodeState::Failed);
+    }
+
+    fn mark_cancelled(&self, path: &str) {
+        self.apply_transition(path, NodeState::Cancelled);
     }
 
     fn has_failed_dep(&self, deps: &[String]) -> bool {
         let states = self.node_states.lock();
-        deps.iter().any(|d| states.get(d).copied() == Some(NodeState::Failed))
+        deps.iter().any(|d| {
+            matches!(
+                states.get(d).copied(),
+                Some(NodeState::Failed) | Some(NodeState::Cancelled)
+            )
+        })
     }
 
     fn deps_ready(&self, deps: &[String], graph: &Graph) -> bool {
         let states = self.node_states.lock();
         deps.iter().all(|d| {
-            states.get(d).copied() == Some(NodeState::Completed)
-                || graph.get_node(d).map(|n| n.is_source).unwrap_or(true)
+            matches!(
+                states.get(d).copied(),
+                Some(NodeState::Completed) | Some(NodeState::Ready) | Some(NodeState::Running)
+            ) || graph.get_node(d).map(|n| n.is_source).unwrap_or(true)
         })
     }
 
@@ -232,6 +303,7 @@ impl BuildState {
         self.trace.allocate_tid()
     }
 
+    #[allow(dead_code)]
     fn trace_begin(&self, target: &str, command: Option<&str>, tid: u32) -> u64 {
         self.trace.begin_target(target, command, tid)
     }
@@ -279,13 +351,14 @@ impl Executor {
                 .worker_threads(self.config.parallelism.min(num_cpus::get()))
                 .enable_all()
                 .build()
-                .map_err(|e| ExecError::SpawnError(e.into()))?;
+                .map_err(ExecError::SpawnError)?;
 
             rt.block_on(self.run_async(graph, targets))
         }
     }
 
     /// Handle the result of a completed task
+    #[allow(clippy::type_complexity)]
     fn handle_task_result(
         result: Result<Result<(String, bool, Option<String>), (String, ExecError)>, tokio::task::JoinError>,
         cache: &Option<Cache>,
@@ -390,7 +463,10 @@ impl Executor {
             // Check if we should stop due to failures
             let fail_count = state.fail_count.load(Ordering::SeqCst);
             if self.config.keep_going > 0 && fail_count >= self.config.keep_going {
-                // Cancel pending work
+                // Cancel remaining pending work
+                for node in &pending {
+                    state.mark_cancelled(&node.path);
+                }
                 break;
             }
 
@@ -429,11 +505,17 @@ impl Executor {
                 let pool = node.pool.clone();
                 let deps = node.deps.clone();
 
-                // Get cache reference if available
+                // Collect environment variables that affect the build
+                let env_vars = collect_relevant_env_vars();
+                let env_refs: Vec<(&str, &str)> =
+                    env_vars.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+                // Compute cache key
                 let cache_key = if let (Some(cache), Some(cmd)) = (&self.cache, &command) {
                     if !is_phony {
-                        let input_paths: Vec<_> = deps.iter().map(|d| Path::new(d.as_str())).collect();
-                        match cache.action_key(cmd, &input_paths, &[]) {
+                        let input_paths: Vec<_> =
+                            deps.iter().map(|d| Path::new(d.as_str())).collect();
+                        match cache.action_key(cmd, &input_paths, &env_refs) {
                             Ok(key) => Some(key),
                             Err(e) => {
                                 tracing::warn!("Failed to compute cache key: {}", e);
@@ -447,27 +529,77 @@ impl Executor {
                     None
                 };
 
-                // Check cache before spawning
-                let cached_entry = if let (Some(cache), Some(key)) = (&self.cache, &cache_key) {
-                    cache.lookup(key)
-                } else {
-                    None
-                };
+                // Check cache and try restore synchronously before spawning
+                let mut restored = false;
+                if let (Some(cache), Some(key)) = (&self.cache, &cache_key) {
+                    if let Some(entry) = cache.lookup(key) {
+                        match cache.restore(&entry) {
+                            Ok(true) => {
+                                state.record_cache_hit();
+                                state.mark_completed(&path);
+                                restored = true;
+                            }
+                            Ok(false) => {
+                                debug!(
+                                    "Cache entry found but blob missing for {}",
+                                    path
+                                );
+                            }
+                            Err(e) => {
+                                debug!("Cache restore failed for {}: {}", path, e);
+                            }
+                        }
+                    }
+                }
+
+                if restored {
+                    // Emit cache hit output and trace inline (no task spawn)
+                    let idx = state.next_progress();
+                    match state.output_mode {
+                        OutputMode::Human => {
+                            let desc = description.as_deref().unwrap_or("cached");
+                            println!("[{}/{}] {} (cached)", idx, state.total, desc);
+                            let _ = std::io::stdout().flush();
+                        }
+                        OutputMode::Json => {
+                            JsonEvent::CacheHit {
+                                target: &path,
+                                index: idx,
+                                total: state.total,
+                            }
+                            .emit();
+                        }
+                    }
+                    let tid = state.allocate_tid();
+                    let trace_start = state.trace.timestamp();
+                    state.trace_complete(
+                        &path,
+                        trace_start,
+                        0,
+                        tid,
+                        command.as_deref(),
+                        true,
+                    );
+                    continue;
+                }
+
+                // Not restored from cache; spawn task for execution
+                state.mark_ready(&path);
 
                 let handle = tokio::spawn(async move {
                     // Acquire semaphore permit
                     let sem = state.get_pool_semaphore(pool.as_deref());
-                    let permit = match sem.acquire().await {
+                    let _permit = match sem.acquire().await {
                         Ok(permit) => permit,
                         Err(e) => {
                             tracing::error!("Failed to acquire semaphore: {}", e);
                             state.mark_failed(&path);
-                            return Err((path, ExecError::SpawnError(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("semaphore error: {}", e),
+                            return Err((path, ExecError::SpawnError(std::io::Error::other(format!("semaphore error: {}", e),
                             ))));
                         }
                     };
+
+                    state.mark_running(&path);
 
                     // Allocate thread ID for tracing
                     let tid = state.allocate_tid();
@@ -485,15 +617,20 @@ impl Executor {
                         state.next_progress(),
                         state.total,
                         &config,
-                        cached_entry.as_ref(),
                         &state,
                     )
                     .await;
 
                     // Record trace event
                     let duration_us = exec_start.elapsed().as_micros() as u64;
-                    let cache_hit = cached_entry.is_some();
-                    state.trace_complete(&path, trace_start, duration_us, tid, command.as_deref(), cache_hit);
+                    state.trace_complete(
+                        &path,
+                        trace_start,
+                        duration_us,
+                        tid,
+                        command.as_deref(),
+                        false,
+                    );
 
                     match result {
                         Ok(executed) => {
@@ -616,6 +753,7 @@ impl Executor {
  /// files. This means shell injection is possible if build rules contain untrusted
  /// input. Only use build files from trusted sources. Consider running rninja
  /// with `--dry-run` for untrusted projects.
+#[allow(clippy::too_many_arguments)]
  async fn execute_node_async(
     path: &str,
     command: Option<&str>,
@@ -627,7 +765,6 @@ impl Executor {
     idx: usize,
     total: usize,
     config: &Config,
-    cached: Option<&CacheEntry>,
     state: &BuildState,
 ) -> Result<bool, ExecError> {
     // Skip phony targets
@@ -639,32 +776,6 @@ impl Executor {
         Some(cmd) => cmd,
         None => return Ok(false),
     };
-
-    // Check if we have a cached result
-    if let Some(_entry) = cached {
-        // Restore from cache
-        match state.output_mode {
-            OutputMode::Human => {
-                let desc = description.unwrap_or("cached");
-                println!("[{}/{}] {} (cached)", idx, total, desc);
-                if let Err(e) = std::io::stdout().flush() {
-                    debug!("Failed to flush stdout: {}", e);
-                }
-            }
-            OutputMode::Json => {
-                JsonEvent::CacheHit {
-                    target: path,
-                    index: idx,
-                    total,
-                }.emit();
-            }
-        }
-
-        // For now, we trust the cache - the file should already exist from the blob restore
-        // In a full implementation, we'd restore the blobs here
-        state.record_cache_hit();
-        return Ok(false);
-    }
 
     state.record_cache_miss();
 

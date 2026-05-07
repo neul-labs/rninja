@@ -9,11 +9,9 @@ use crate::cache::remote::protocol::{
 };
 use crate::cache::{BlobStore, CacheEntry};
 use crate::error::ExecError;
-use nng::options::Options;
-use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 use tracing::{debug, error, info, warn};
@@ -27,6 +25,7 @@ fn is_valid_hash(hash: &str) -> bool {
 pub struct CacheServer {
     config: ServerConfig,
     db: sled::Db,
+    #[allow(dead_code)]
     blobs: BlobStore,
     auth: TokenValidator,
     stats: Arc<ServerStats>,
@@ -38,18 +37,14 @@ impl CacheServer {
     pub fn new(config: ServerConfig) -> Result<Self, ExecError> {
         // Create storage directory
         std::fs::create_dir_all(&config.storage_dir).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to create storage dir: {}", e),
+            ExecError::SpawnError(std::io::Error::other(format!("failed to create storage dir: {}", e),
             ))
         })?;
 
         // Open sled database
         let db_path = config.storage_dir.join("index");
         let db = sled::open(&db_path).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to open database: {}", e),
+            ExecError::SpawnError(std::io::Error::other(format!("failed to open database: {}", e),
             ))
         })?;
 
@@ -78,16 +73,12 @@ impl CacheServer {
     /// Run the server main loop
     pub async fn run(&self) -> Result<(), ExecError> {
         let socket = nng::Socket::new(nng::Protocol::Rep0).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to create socket: {}", e),
+            ExecError::SpawnError(std::io::Error::other(format!("failed to create socket: {}", e),
             ))
         })?;
 
         socket.listen(&self.config.listen_addr).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to listen on {}: {}", self.config.listen_addr, e),
+            ExecError::SpawnError(std::io::Error::other(format!("failed to listen on {}: {}", self.config.listen_addr, e),
             ))
         })?;
 
@@ -295,7 +286,16 @@ impl CacheServer {
         // A full implementation would handle chunked uploads
         if offset == 0 && data.len() as u64 == total {
             // Store directly
-            let blob_path = self.blob_path(hash);
+            let blob_path = match self.blob_path(hash) {
+                Some(p) => p,
+                None => {
+                    warn!("Internal hash validation inconsistency for {}", hash);
+                    return Response::error(
+                        ErrorCode::ServerError,
+                        "internal hash validation inconsistency",
+                    );
+                }
+            };
             if let Some(parent) = blob_path.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
                     warn!("Failed to create blob directory: {}", e);
@@ -327,7 +327,16 @@ impl CacheServer {
         }
 
         // Verify blob exists
-        let blob_path = self.blob_path(hash);
+        let blob_path = match self.blob_path(hash) {
+            Some(p) => p,
+            None => {
+                warn!("Internal hash validation inconsistency for {}", hash);
+                return Response::error(
+                    ErrorCode::ServerError,
+                    "internal hash validation inconsistency",
+                );
+            }
+        };
         if blob_path.exists() {
             Response::BlobComplete {
                 hash: hash.to_string(),
@@ -348,7 +357,16 @@ impl CacheServer {
 
         // Check all blobs exist
         for hash in hashes {
-            let blob_path = self.blob_path(hash);
+            let blob_path = match self.blob_path(hash) {
+                Some(p) => p,
+                None => {
+                    warn!("Internal hash validation inconsistency for {}", hash);
+                    return Response::error(
+                        ErrorCode::ServerError,
+                        "internal hash validation inconsistency",
+                    );
+                }
+            };
             if !blob_path.exists() {
                 return Response::NotFound;
             }
@@ -356,16 +374,18 @@ impl CacheServer {
         Response::Ok
     }
 
-    fn blob_path(&self, hash: &str) -> PathBuf {
+    fn blob_path(&self, hash: &str) -> Option<PathBuf> {
         // Validate hash to prevent path traversal attacks
         if !is_valid_hash(hash) {
-            panic!("invalid hash format in blob_path: {}", hash);
+            return None;
         }
         let prefix = if hash.len() >= 2 { &hash[..2] } else { hash };
-        self.config
-            .storage_dir
-            .join("blobs")
-            .join(prefix)
-            .join(hash)
+        Some(
+            self.config
+                .storage_dir
+                .join("blobs")
+                .join(prefix)
+                .join(hash),
+        )
     }
 }

@@ -33,34 +33,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        target:
-          - x86_64-unknown-linux-gnu
-          - x86_64-apple-darwin
-          - aarch64-apple-darwin
-          - x86_64-pc-windows-msvc
         include:
           - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-        exclude:
-          - os: macos-latest
             target: x86_64-unknown-linux-gnu
-          - os: macos-latest
+          - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
           - os: macos-latest
-            target: x86_64-pc-windows-msvc
-          - os: windows-latest
-            target: x86_64-unknown-linux-gnu
-          - os: windows-latest
-            target: aarch64-unknown-linux-gnu
-          - os: windows-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
             target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Get version
         id: version
+        shell: bash
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Install Rust
@@ -71,37 +61,45 @@ jobs:
       - name: Add target
         run: rustup target add ${{ matrix.target }}
 
+      - name: Install cross
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
       - name: Build rninja
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: build
-          args: --release --target ${{ matrix.target }} --features release
+        run: |
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+        shell: bash
 
       - name: Build rninja-cached
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: build
-          args: --release --target ${{ matrix.target }} --features release --bin rninja-cached
+        run: |
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            cross build --release --target ${{ matrix.target }} --bin rninja-cached
+          else
+            cargo build --release --target ${{ matrix.target }} --bin rninja-cached
+          fi
+        shell: bash
 
       - name: Create zip/tarball
         if: matrix.os != 'windows-latest'
         run: |
-          tar czf rninja-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release rninja rninja-cached
+          tar czf rninja-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release rninja rninja-cached rninja-daemon
 
       - name: Create zip
         if: matrix.os == 'windows-latest'
         run: |
-          Compress-Archive -Path target/${{ matrix.target }}/release/rninja.exe,target/${{ matrix.target }}/release/rninja-cached.exe -DestinationPath rninja-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}.zip
+          Compress-Archive -Path target/${{ matrix.target }}/release/rninja.exe,target/${{ matrix.target }}/release/rninja-cached.exe,target/${{ matrix.target }}/release/rninja-daemon.exe -DestinationPath rninja-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}.zip
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.os }}-${{ matrix.target }}
           path: |
-            rninja-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}.tar.gz
-            rninja-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}.zip
+            ${{ matrix.os != 'windows-latest' && format('rninja-{0}-{1}.tar.gz', steps.version.outputs.VERSION, matrix.target) || '' }}
+            ${{ matrix.os == 'windows-latest' && format('rninja-{0}-{1}.zip', steps.version.outputs.VERSION, matrix.target) || '' }}
           retention-days: 1
 
   create-release:
@@ -123,7 +121,7 @@ jobs:
       - name: Create checksums
         run: |
           cd artifacts
-          find . -name "*.tar.gz" -o -name "*.zip" | xargs shasum -a 256 > checksums.txt
+          find . -name "*.tar.gz" -o -name "*.zip" | xargs sha256sum > checksums.txt
           cat checksums.txt
 
       - name: Upload checksums
@@ -182,45 +180,96 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  update-homebrew:
-    name: Update Homebrew Formula
+  update-homebrew-tap:
+    name: Update Homebrew Tap
     needs: create-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: |
-            .github/homebrew-formula
-          sparse-checkout-cone-mode: false
+          repository: neul-labs/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
 
       - name: Get version
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Update Homebrew formula
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download checksums
+        uses: actions/download-artifact@v4
+        with:
+          name: checksums
+          path: checksums
+
+      - name: Update formula
         run: |
-          cd .github/homebrew-formula
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          FORMULA="homebrew-tap/Formula/rninja.rb"
 
-          # Update version and sha256 in formula
-          FORMULA_FILE="rninja.rb"
+          # Read checksums
+          DARWIN_AMD64=$(grep "x86_64-apple-darwin" checksums/checksums.txt | awk '{print $1}')
+          DARWIN_ARM64=$(grep "aarch64-apple-darwin" checksums/checksums.txt | awk '{print $1}')
+          LINUX_AMD64=$(grep "x86_64-unknown-linux-gnu" checksums/checksums.txt | awk '{print $1}')
+          LINUX_ARM64=$(grep "aarch64-unknown-linux-gnu" checksums/checksums.txt | awk '{print $1}')
 
-          # Get the sha256 hash of the x86_64-darwin archive
-          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/v${{ steps.version.outputs.VERSION }}.tar.gz"
-          SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | cut -d' ' -f1)
+          sed -i "s/version \".*\"/version \"$VERSION\"/" "$FORMULA"
+          sed -i "s|url \"https://github.com/neul-labs/rninja/releases/download/v.*/rninja-.*-x86_64-apple-darwin.tar.gz\"|url \"https://github.com/neul-labs/rninja/releases/download/v$VERSION/rninja-$VERSION-x86_64-apple-darwin.tar.gz\"|" "$FORMULA"
+          sed -i "s|url \"https://github.com/neul-labs/rninja/releases/download/v.*/rninja-.*-aarch64-apple-darwin.tar.gz\"|url \"https://github.com/neul-labs/rninja/releases/download/v$VERSION/rninja-$VERSION-aarch64-apple-darwin.tar.gz\"|" "$FORMULA"
+          sed -i "s|url \"https://github.com/neul-labs/rninja/releases/download/v.*/rninja-.*-x86_64-unknown-linux-gnu.tar.gz\"|url \"https://github.com/neul-labs/rninja/releases/download/v$VERSION/rninja-$VERSION-x86_64-unknown-linux-gnu.tar.gz\"|" "$FORMULA"
+          sed -i "s|url \"https://github.com/neul-labs/rninja/releases/download/v.*/rninja-.*-aarch64-unknown-linux-gnu.tar.gz\"|url \"https://github.com/neul-labs/rninja/releases/download/v$VERSION/rninja-$VERSION-aarch64-unknown-linux-gnu.tar.gz\"|" "$FORMULA"
 
-          # Create the formula with updated version and hash
-          sed -i "s/version \".*\"/version \"${{ steps.version.outputs.VERSION }}\"/" "$FORMULA_FILE"
-          sed -i "s/sha256 \".*\"/sha256 \"$SHA256\"/" "$FORMULA_FILE"
+          python3 <<PYEOF
+          import re
+          formula = open("$FORMULA").read()
+          formula = re.sub(r'sha256 "placeholder_sha256"', f'sha256 "{DARWIN_AMD64}"', formula, count=1)
+          formula = re.sub(r'sha256 "placeholder_sha256"', f'sha256 "{DARWIN_ARM64}"', formula, count=1)
+          formula = re.sub(r'sha256 "placeholder_sha256"', f'sha256 "{LINUX_AMD64}"', formula, count=1)
+          formula = re.sub(r'sha256 "placeholder_sha256"', f'sha256 "{LINUX_ARM64}"', formula, count=1)
+          open("$FORMULA", "w").write(formula)
+          PYEOF
 
-          # Commit and push to a homebrew-tap repo (if it exists)
-          # For users, they can use: brew install dipankarsarkar/tap/rninja
-          echo "Formula updated for version ${{ steps.version.outputs.VERSION }}"
-          echo "SHA256: $SHA256"
+      - name: Commit and push
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/rninja.rb
+          git diff --quiet --cached && exit 0
+          git commit -m "rninja ${{ steps.version.outputs.VERSION }}"
+          git push
 
-          # Output the formula content for reference
-          cat "$FORMULA_FILE"
+  publish-pypi:
+    name: Publish to PyPI
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Update version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          sed -i "s/version = \".*\"/version = \"$VERSION\"/" .github/pypi-package/pyproject.toml
+          sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" .github/pypi-package/rninja/__init__.py
+          sed -i "s/VERSION = \".*\"/VERSION = \"$VERSION\"/" .github/pypi-package/rninja/cli.py
+
+      - name: Build package
+        working-directory: .github/pypi-package
+        run: python -m build
+
+      - name: Publish to PyPI
+        working-directory: .github/pypi-package
+        run: twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
   publish-snap:
     name: Publish to Snap Store
@@ -241,4 +290,4 @@ jobs:
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: |
-          snapcraft upload target/*.snap --release stable
+          snapcraft upload *.snap --release stable

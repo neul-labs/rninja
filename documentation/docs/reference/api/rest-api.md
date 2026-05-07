@@ -46,7 +46,7 @@ Response:
 ```json
 {
   "status": "healthy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "uptime_seconds": 86400
 }
 ```

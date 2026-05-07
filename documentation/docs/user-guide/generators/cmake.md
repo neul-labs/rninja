@@ -262,7 +262,7 @@ Ensure rninja is actually being used:
 cmake --build build -- --version
 
 # Should show:
-# rninja 0.1.0
+# rninja 0.1.1
 ```
 
 ## Tips

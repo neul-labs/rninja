@@ -51,9 +51,7 @@ pub fn run_cache_gc(options: GcOptions, verbose: bool) -> Result<GcReport, ExecE
 
     let db_path = config.cache_dir.join("index");
     let db = sled::open(&db_path).map_err(|e| {
-        ExecError::SpawnError(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("failed to open cache db: {}", e),
+        ExecError::SpawnError(std::io::Error::other(format!("failed to open cache db: {}", e),
         ))
     })?;
 
@@ -72,49 +70,45 @@ pub fn run_cache_gc(options: GcOptions, verbose: bool) -> Result<GcReport, ExecE
     if let Some(max_age_days) = options.max_age_days {
         let max_age = Duration::from_secs(max_age_days * 86400);
 
-        for item in db.iter() {
-            if let Ok((key, value)) = item {
-                match CacheEntry::deserialize(&value) {
-                    Ok(entry) => {
-                        let age = now.duration_since(entry.created).unwrap_or_default();
+        for (key, value) in db.iter().flatten() {
+            match CacheEntry::deserialize(&value) {
+                Ok(entry) => {
+                    let age = now.duration_since(entry.created).unwrap_or_default();
 
-                        if age > max_age {
-                            report.expired_entries += 1;
-                            report.expired_bytes += value.len() as u64;
-                            entries_to_remove.push(key.to_vec());
-                            if verbose {
-                                debug!(
-                                    "Expired entry: {} (age: {} days)",
-                                    String::from_utf8_lossy(&key),
-                                    age.as_secs() / 86400
-                                );
-                            }
-                        } else {
-                            // Track referenced hashes
-                            for (_, hash) in &entry.outputs {
-                                referenced_hashes.insert(hash.clone());
-                            }
+                    if age > max_age {
+                        report.expired_entries += 1;
+                        report.expired_bytes += value.len() as u64;
+                        entries_to_remove.push(key.to_vec());
+                        if verbose {
+                            debug!(
+                                "Expired entry: {} (age: {} days)",
+                                String::from_utf8_lossy(&key),
+                                age.as_secs() / 86400
+                            );
+                        }
+                    } else {
+                        // Track referenced hashes
+                        for (_, hash) in &entry.outputs {
+                            referenced_hashes.insert(hash.clone());
                         }
                     }
-                    Err(e) => {
-                        warn!("Failed to deserialize cache entry: {}", e);
-                    }
+                }
+                Err(e) => {
+                    warn!("Failed to deserialize cache entry: {}", e);
                 }
             }
         }
     } else {
         // Just collect all referenced hashes
-        for item in db.iter() {
-            if let Ok((_, value)) = item {
-                match CacheEntry::deserialize(&value) {
-                    Ok(entry) => {
-                        for (_, hash) in &entry.outputs {
-                            referenced_hashes.insert(hash.clone());
-                        }
+        for (_, value) in db.iter().flatten() {
+            match CacheEntry::deserialize(&value) {
+                Ok(entry) => {
+                    for (_, hash) in &entry.outputs {
+                        referenced_hashes.insert(hash.clone());
                     }
-                    Err(e) => {
-                        warn!("Failed to deserialize cache entry: {}", e);
-                    }
+                }
+                Err(e) => {
+                    warn!("Failed to deserialize cache entry: {}", e);
                 }
             }
         }
@@ -243,15 +237,13 @@ fn evict_lru(db: &sled::Db, bytes_to_free: u64, dry_run: bool) -> Result<(u64, u
     // Collect entries with their creation time
     let mut entries: Vec<(Vec<u8>, SystemTime, u64)> = Vec::new();
 
-    for item in db.iter() {
-        if let Ok((key, value)) = item {
-            match CacheEntry::deserialize(&value) {
-                Ok(entry) => {
-                    entries.push((key.to_vec(), entry.created, value.len() as u64));
-                }
-                Err(e) => {
-                    warn!("Failed to deserialize cache entry during eviction: {}", e);
-                }
+    for (key, value) in db.iter().flatten() {
+        match CacheEntry::deserialize(&value) {
+            Ok(entry) => {
+                entries.push((key.to_vec(), entry.created, value.len() as u64));
+            }
+            Err(e) => {
+                warn!("Failed to deserialize cache entry during eviction: {}", e);
             }
         }
     }

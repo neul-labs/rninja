@@ -2,23 +2,18 @@
 
 use console::{Style, Term};
 use serde::Serialize;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 /// Output mode for progress reporting
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum OutputMode {
     /// Human-readable output with colors and formatting
+    #[default]
     Human,
     /// Machine-readable JSON output (one JSON object per line)
     Json,
-}
-
-impl Default for OutputMode {
-    fn default() -> Self {
-        Self::Human
-    }
 }
 
 /// JSON event types for machine consumption
@@ -126,7 +121,7 @@ impl ProgressReporter {
     }
 
     pub fn with_mode(total: usize, verbose: bool, output_mode: OutputMode, parallelism: usize) -> Self {
-        let is_tty = atty::is(atty::Stream::Stdout);
+        let is_tty = std::io::stdout().is_terminal();
         Self {
             term: Term::stderr(),
             styles: Styles::default(),
@@ -235,6 +230,7 @@ pub struct ProgressHandle {
     styles: Styles,
     total: usize,
     built: Arc<AtomicUsize>,
+    #[allow(dead_code)]
     is_tty: bool,
     verbose: bool,
     enabled: Arc<AtomicBool>,

@@ -10,11 +10,44 @@ A Rust-powered drop-in replacement for [Ninja](https://ninja-build.org/) with bu
 
 ## Installation
 
-```bash
-# From crates.io
-cargo install rninja
+### Homebrew (macOS & Linux)
 
-# Or build from source
+```bash
+brew tap neul-labs/tap
+brew install rninja
+```
+
+### NPM
+
+```bash
+npm install -g rninja
+```
+
+### PyPI
+
+```bash
+pip install rninja
+```
+
+### Cargo
+
+```bash
+cargo install rninja
+```
+
+### Snap Store
+
+```bash
+sudo snap install rninja
+```
+
+### From GitHub Releases
+
+Download prebuilt binaries from the [Releases page](https://github.com/neul-labs/rninja/releases).
+
+### Build from source
+
+```bash
 git clone https://github.com/neul-labs/rninja
 cd rninja
 cargo install --path .

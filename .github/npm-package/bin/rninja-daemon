@@ -2,7 +2,7 @@
 const path = require('path');
 const child_process = require('child_process');
 
-const binPath = path.join(__dirname, '.rninja-binaries', 'rninja');
+const binPath = path.join(__dirname, '.rninja-binaries', 'rninja-daemon');
 const result = child_process.spawnSync(binPath, process.argv.slice(2), {
   stdio: 'inherit',
   shell: process.platform === 'win32'

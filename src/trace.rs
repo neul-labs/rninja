@@ -36,6 +36,7 @@ struct TraceEvent {
 pub struct BuildTrace {
     events: Mutex<Vec<TraceEvent>>,
     start_time: Instant,
+    #[allow(dead_code)]
     start_timestamp: u64,
     next_tid: AtomicU64,
     enabled: bool,

@@ -5,8 +5,9 @@ const path = require('path');
 const https = require('https');
 const { createHash } = require('crypto');
 
-const PKG_ROOT = __dirname;
+const PKG_ROOT = path.join(__dirname, '..');
 const BIN_DIR = path.join(PKG_ROOT, 'bin');
+const NATIVE_DIR = path.join(BIN_DIR, '.rninja-binaries');
 const ARCH_MAP = {
   'x64': 'x86_64',
   'arm64': 'aarch64'
@@ -15,18 +16,20 @@ const ARCH_MAP = {
 function getPlatform() {
   const platform = os.platform();
   const arch = os.arch();
-  if (platform === 'win32') return { platform: 'pc-windows', arch: 'x86_64' };
-  if (platform === 'darwin') return { platform: 'apple-darwin', arch };
-  if (platform === 'linux') return { platform: 'unknown-linux-gnu', arch: ARCH_MAP[arch] || arch };
+  const mappedArch = ARCH_MAP[arch] || arch;
+
+  if (platform === 'win32') return { platform: 'pc-windows-msvc', arch: mappedArch, ext: 'zip' };
+  if (platform === 'darwin') return { platform: 'apple-darwin', arch: mappedArch, ext: 'tar.gz' };
+  if (platform === 'linux') return { platform: 'unknown-linux-gnu', arch: mappedArch, ext: 'tar.gz' };
   throw new Error(`Unsupported platform: ${platform}`);
 }
 
-function getDownloadUrl(version, platform, arch) {
-  return `https://github.com/dipankarsarkar/rninja/releases/download/v${version}/rninja-${version}-${arch}-${platform}.tar.gz`;
+function getDownloadUrl(version, platform, arch, ext) {
+  return `https://github.com/neul-labs/rninja/releases/download/v${version}/rninja-${version}-${arch}-${platform}.${ext}`;
 }
 
 function getChecksumUrl(version) {
-  return `https://github.com/dipankarsarkar/rninja/releases/download/v${version}/checksums.txt`;
+  return `https://github.com/neul-labs/rninja/releases/download/v${version}/checksums.txt`;
 }
 
 function downloadFile(url, dest) {
@@ -35,6 +38,10 @@ function downloadFile(url, dest) {
     https.get(url, (response) => {
       if (response.statusCode === 302 || response.statusCode === 301) {
         downloadFile(response.headers.location, dest).then(resolve).catch(reject);
+        return;
+      }
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP ${response.statusCode}: ${url}`));
         return;
       }
       response.pipe(file);
@@ -62,16 +69,21 @@ function verifyChecksum(filePath, checksums) {
 }
 
 async function install() {
-  const version = require('./package.json').version;
-  const { platform, arch } = getPlatform();
+  const version = require(path.join(PKG_ROOT, 'package.json')).version;
+  const { platform, arch, ext } = getPlatform();
 
   console.log(`Installing rninja ${version} for ${platform} ${arch}`);
 
-  const tarball = `rninja-${version}-${arch}-${platform}.tar.gz`;
+  const tarball = `rninja-${version}-${arch}-${platform}.${ext}`;
   const tarballPath = path.join(BIN_DIR, tarball);
-  const url = getDownloadUrl(version, platform, arch);
+  const url = getDownloadUrl(version, platform, arch, ext);
 
   console.log(`Downloading from ${url}`);
+
+  // Ensure native directory exists
+  if (!fs.existsSync(NATIVE_DIR)) {
+    fs.mkdirSync(NATIVE_DIR, { recursive: true });
+  }
 
   try {
     // Download checksums
@@ -95,7 +107,7 @@ async function install() {
       }
     });
 
-    // Download tarball
+    // Download tarball/zip
     await downloadFile(url, tarballPath);
 
     // Verify checksum
@@ -104,16 +116,24 @@ async function install() {
 
     // Extract
     console.log('Extracting...');
-    execSync(`tar -xzf ${tarball} -C ${BIN_DIR}`, { cwd: BIN_DIR });
+    if (ext === 'zip') {
+      execSync(`powershell -command "Expand-Archive -Path '${tarballPath}' -DestinationPath '${NATIVE_DIR}' -Force"`, { cwd: BIN_DIR });
+    } else {
+      execSync(`tar -xzf ${tarball} -C .rninja-binaries`, { cwd: BIN_DIR });
+    }
 
     // Cleanup
     fs.unlinkSync(tarballPath);
 
-    // Make binaries executable
-    const rninjaPath = path.join(BIN_DIR, 'rninja');
-    const rninjaCachedPath = path.join(BIN_DIR, 'rninja-cached');
-    if (fs.existsSync(rninjaPath)) fs.chmodSync(rninjaPath, '755');
-    if (fs.existsSync(rninjaCachedPath)) fs.chmodSync(rninjaCachedPath, '755');
+    // Make binaries executable on Unix
+    if (os.platform() !== 'win32') {
+      for (const binary of ['rninja', 'rninja-cached', 'rninja-daemon']) {
+        const binaryPath = path.join(NATIVE_DIR, binary);
+        if (fs.existsSync(binaryPath)) {
+          fs.chmodSync(binaryPath, '755');
+        }
+      }
+    }
 
     console.log('Installation complete!');
   } catch (err) {

@@ -58,7 +58,7 @@ rninja's path to a fully featured, trustworthy drop-in replacement spans multipl
    - Tests concurrent clients and cache server performance
 
 4. **CI/Automation**
-   - ⏳ Integrate benchmarks into CI (future)
+   - ✅ Integrate benchmarks into CI
 
 ## Compatibility Test Milestones ✅ COMPLETE
 
@@ -83,11 +83,19 @@ rninja's path to a fully featured, trustworthy drop-in replacement spans multipl
    - `tests/integration/network_test.sh` - 4 tests (100% pass)
    - Cache disabled, local cache, invalid socket fallback
 
+## Distribution Milestones ✅ COMPLETE
+
+- ✅ Pre-built binaries for macOS (x86_64, aarch64) and Linux (x86_64, aarch64)
+- ✅ Homebrew formula published to `neul-labs/homebrew-tap`
+- ✅ NPM wrapper package for `npm install -g rninja`
+- ✅ PyPI wrapper package for `pip install rninja`
+- ✅ Snap Store packaging
+
 ## Deliverables
 
-- `benchmarks/` harness and published dataset across roadmap phases.  
-- `tests/compat/` suite run in CI, with badges/logs highlighting status.  
-- Comprehensive unit/integration tests per phase, tracked under `tests/unit` and `tests/integration`.  
+- `benchmarks/` harness and published dataset across roadmap phases.
+- `tests/compat/` suite run in CI, with badges/logs highlighting status.
+- Comprehensive unit/integration tests per phase, tracked under `tests/unit` and `tests/integration`.
 - Phase-specific documentation updates committed alongside features.
 - Documentation of benchmarking methodology, compatibility coverage, and phase readiness checklists.
 

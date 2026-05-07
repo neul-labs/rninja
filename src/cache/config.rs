@@ -14,6 +14,7 @@ pub enum CacheMode {
 }
 
 impl CacheMode {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "local" => Some(CacheMode::Local),
@@ -37,6 +38,7 @@ pub enum PushPolicy {
 }
 
 impl PushPolicy {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "never" => Some(PushPolicy::Never),
@@ -60,6 +62,7 @@ pub enum PullPolicy {
 }
 
 impl PullPolicy {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "always" => Some(PullPolicy::Always),

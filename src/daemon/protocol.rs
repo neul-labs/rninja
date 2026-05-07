@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_response_roundtrip() {
         let resp = DaemonResponse::Pong {
-            version: "0.1.0".to_string(),
+            version: "0.1.1".to_string(),
             protocol_version: DAEMON_PROTOCOL_VERSION,
             uptime_secs: 100,
         };
@@ -330,7 +330,7 @@ mod tests {
         let decoded = deserialize_response(&data).unwrap();
 
         if let DaemonResponse::Pong { version, .. } = decoded {
-            assert_eq!(version, "0.1.0");
+            assert_eq!(version, "0.1.1");
         } else {
             panic!("Expected Pong response");
         }

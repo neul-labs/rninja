@@ -38,21 +38,14 @@ pub struct HealthReport {
 }
 
 /// Run cache health checks
-pub fn run_cache_health(verbose: bool, json: bool) -> Result<HealthReport, ExecError> {
+pub fn run_cache_health(_verbose: bool, json: bool) -> Result<HealthReport, ExecError> {
     let config = CacheConfig::from_env();
-    let mut checks = Vec::new();
-
-    // Check 1: Directory accessible
-    checks.push(check_directory_access(&config.cache_dir));
-
-    // Check 2: Sled database integrity
-    checks.push(check_sled_integrity(&config.cache_dir.join("index")));
-
-    // Check 3: Blob store integrity (sample)
-    checks.push(check_blob_integrity(&config.cache_dir.join("blobs")));
-
-    // Check 4: Disk space availability
-    checks.push(check_disk_space(&config.cache_dir));
+    let checks = vec![
+        check_directory_access(&config.cache_dir),
+        check_sled_integrity(&config.cache_dir.join("index")),
+        check_blob_integrity(&config.cache_dir.join("blobs")),
+        check_disk_space(&config.cache_dir),
+    ];
 
     // Determine overall status
     let overall_status = if checks.iter().any(|c| !c.passed && c.severity == Severity::Critical) {
@@ -69,7 +62,14 @@ pub fn run_cache_health(verbose: bool, json: bool) -> Result<HealthReport, ExecE
     };
 
     if json {
-        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        match serde_json::to_string_pretty(&report) {
+            Ok(s) => println!("{}", s),
+            Err(e) => {
+                eprintln!("Error serializing health report: {}", e);
+                return Err(ExecError::SpawnError(std::io::Error::other(format!("serialization error: {}", e),
+                )));
+            }
+        }
     } else {
         print_human_readable(&report);
     }

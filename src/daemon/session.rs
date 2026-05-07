@@ -22,6 +22,41 @@ pub enum SessionState {
     Cancelled,
 }
 
+/// Error returned when an invalid session state transition is attempted
+#[derive(Debug)]
+pub struct InvalidSessionTransition {
+    pub from: SessionState,
+    pub to: SessionState,
+}
+
+impl std::fmt::Display for InvalidSessionTransition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid session state transition: {:?} -> {:?}",
+            self.from, self.to
+        )
+    }
+}
+
+impl SessionState {
+    /// Attempt to transition from `self` to `to`, returning `Err` if invalid.
+    pub fn transition(self, to: SessionState) -> Result<SessionState, InvalidSessionTransition> {
+        match (self, to) {
+            // From Running
+            (SessionState::Running, SessionState::Completed)
+            | (SessionState::Running, SessionState::Failed)
+            | (SessionState::Running, SessionState::Cancelled) => Ok(to),
+            // Terminal states are idempotent
+            (SessionState::Completed, SessionState::Completed)
+            | (SessionState::Failed, SessionState::Failed)
+            | (SessionState::Cancelled, SessionState::Cancelled) => Ok(to),
+            // All other transitions are invalid
+            (from, to) => Err(InvalidSessionTransition { from, to }),
+        }
+    }
+}
+
 /// A build session representing an active or completed build
 pub struct BuildSession {
     /// Unique session ID
@@ -66,23 +101,54 @@ impl BuildSession {
         *self.state.read() == SessionState::Running
     }
 
-    /// Mark the session as completed
-    pub fn complete(&self, success: bool) {
-        let mut state = self.state.write();
-        *state = if success {
+    /// Mark the session as completed.
+    ///
+    /// Returns `true` if the transition was applied, `false` if the session
+    /// was already in a terminal state.
+    pub fn complete(&self, success: bool) -> bool {
+        let target = if success {
             SessionState::Completed
         } else {
             SessionState::Failed
         };
 
-        let mut stats = self.stats.write();
-        stats.duration_ms = self.started.elapsed().as_millis() as u64;
+        let mut state = self.state.write();
+        match (*state).transition(target) {
+            Ok(final_state) => {
+                *state = final_state;
+                let mut stats = self.stats.write();
+                stats.duration_ms = self.started.elapsed().as_millis() as u64;
+                true
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Session {}: attempted invalid transition: {}",
+                    self.id, e
+                );
+                false
+            }
+        }
     }
 
-    /// Mark the session as cancelled
-    pub fn cancel(&self) {
+    /// Mark the session as cancelled.
+    ///
+    /// Returns `true` if the transition was applied, `false` if the session
+    /// was already in a terminal state.
+    pub fn cancel(&self) -> bool {
         let mut state = self.state.write();
-        *state = SessionState::Cancelled;
+        match (*state).transition(SessionState::Cancelled) {
+            Ok(final_state) => {
+                *state = final_state;
+                true
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Session {}: attempted invalid transition: {}",
+                    self.id, e
+                );
+                false
+            }
+        }
     }
 
     /// Queue a response for the client
@@ -232,8 +298,7 @@ impl SessionManager {
     /// Cancel a session
     pub fn cancel_session(&self, id: &str) -> bool {
         if let Some(session) = self.get_session(id) {
-            session.cancel();
-            true
+            session.cancel()
         } else {
             false
         }

@@ -293,149 +293,129 @@ impl DaemonServer {
         }
     }
 
+    /// Helper to execute a query that needs a parsed manifest.
+    fn with_manifest<F>(&self, build_dir: &PathBuf, f: F) -> DaemonResponse
+    where
+        F: FnOnce(&crate::daemon::state::CachedManifest) -> DaemonResponse,
+    {
+        match self.state.get_or_parse_manifest(build_dir, "build.ninja") {
+            Ok(cached) => f(&cached),
+            Err(e) => DaemonResponse::Error {
+                code: ErrorCode::ParseError,
+                message: e.to_string(),
+            },
+        }
+    }
+
     /// Handle query request
     fn handle_query(&self, request: QueryRequest) -> DaemonResponse {
         match request {
             QueryRequest::Targets { build_dir } => {
-                match self.state.get_or_parse_manifest(&build_dir, "build.ninja") {
-                    Ok(cached) => {
-                        let targets: Vec<String> = cached.graph.outputs()
-                            .into_iter()
-                            .map(|s| s.to_string())
-                            .collect();
-                        DaemonResponse::QueryResult {
-                            data: targets.join("\n"),
-                        }
+                self.with_manifest(&build_dir, |cached| {
+                    let targets: Vec<String> = cached
+                        .graph
+                        .outputs()
+                        .into_iter()
+                        .map(|s| s.to_string())
+                        .collect();
+                    DaemonResponse::QueryResult {
+                        data: targets.join("\n"),
                     }
-                    Err(e) => DaemonResponse::Error {
-                        code: ErrorCode::ParseError,
-                        message: e.to_string(),
-                    },
-                }
+                })
             }
             QueryRequest::Rules { build_dir } => {
-                match self.state.get_or_parse_manifest(&build_dir, "build.ninja") {
-                    Ok(cached) => {
-                        let rules: Vec<String> = cached.manifest.rules
-                            .keys()
-                            .cloned()
-                            .collect();
-                        DaemonResponse::QueryResult {
-                            data: rules.join("\n"),
-                        }
+                self.with_manifest(&build_dir, |cached| {
+                    let rules: Vec<String> =
+                        cached.manifest.rules.keys().cloned().collect();
+                    DaemonResponse::QueryResult {
+                        data: rules.join("\n"),
                     }
-                    Err(e) => DaemonResponse::Error {
-                        code: ErrorCode::ParseError,
-                        message: e.to_string(),
-                    },
-                }
+                })
             }
             QueryRequest::Commands { build_dir, targets } => {
-                match self.state.get_or_parse_manifest(&build_dir, "build.ninja") {
-                    Ok(cached) => {
-                        let mut commands = Vec::new();
-                        for target in &targets {
-                            if let Some(node) = cached.graph.get_node(target) {
-                                if let Some(cmd) = &node.command {
-                                    commands.push(cmd.clone());
-                                }
+                self.with_manifest(&build_dir, |cached| {
+                    let mut commands = Vec::new();
+                    for target in &targets {
+                        if let Some(node) = cached.graph.get_node(target) {
+                            if let Some(cmd) = &node.command {
+                                commands.push(cmd.clone());
                             }
                         }
-                        DaemonResponse::QueryResult {
-                            data: commands.join("\n"),
-                        }
                     }
-                    Err(e) => DaemonResponse::Error {
-                        code: ErrorCode::ParseError,
-                        message: e.to_string(),
-                    },
-                }
+                    DaemonResponse::QueryResult {
+                        data: commands.join("\n"),
+                    }
+                })
             }
             QueryRequest::Deps { build_dir, target } => {
-                match self.state.get_or_parse_manifest(&build_dir, "build.ninja") {
-                    Ok(cached) => {
-                        if let Some(inputs) = cached.graph.inputs_for(&target) {
+                self.with_manifest(&build_dir, |cached| {
+                    if let Some(inputs) = cached.graph.inputs_for(&target) {
+                        DaemonResponse::QueryResult {
+                            data: inputs.join("\n"),
+                        }
+                    } else {
+                        DaemonResponse::Error {
+                            code: ErrorCode::TargetNotFound,
+                            message: format!("Target not found: {}", target),
+                        }
+                    }
+                })
+            }
+            QueryRequest::Inputs { build_dir, target } => {
+                self.with_manifest(&build_dir, |cached| {
+                    match cached.graph.topological_order(&[&target]) {
+                        Ok(order) => {
+                            let mut inputs = Vec::new();
+                            for t in order {
+                                if let Some(node) = cached.graph.get_node(&t) {
+                                    if node.is_source {
+                                        inputs.push(t);
+                                    }
+                                }
+                            }
                             DaemonResponse::QueryResult {
                                 data: inputs.join("\n"),
                             }
-                        } else {
-                            DaemonResponse::Error {
-                                code: ErrorCode::TargetNotFound,
-                                message: format!("Target not found: {}", target),
-                            }
                         }
+                        Err(e) => DaemonResponse::Error {
+                            code: ErrorCode::InternalError,
+                            message: e.to_string(),
+                        },
                     }
-                    Err(e) => DaemonResponse::Error {
-                        code: ErrorCode::ParseError,
-                        message: e.to_string(),
-                    },
-                }
-            }
-            QueryRequest::Inputs { build_dir, target } => {
-                match self.state.get_or_parse_manifest(&build_dir, "build.ninja") {
-                    Ok(cached) => {
-                        match cached.graph.topological_order(&[&target]) {
-                            Ok(order) => {
-                                let mut inputs = Vec::new();
-                                for t in order {
-                                    if let Some(node) = cached.graph.get_node(&t) {
-                                        if node.is_source {
-                                            inputs.push(t);
-                                        }
-                                    }
-                                }
-                                DaemonResponse::QueryResult {
-                                    data: inputs.join("\n"),
-                                }
-                            }
-                            Err(e) => DaemonResponse::Error {
-                                code: ErrorCode::InternalError,
-                                message: e.to_string(),
-                            },
-                        }
-                    }
-                    Err(e) => DaemonResponse::Error {
-                        code: ErrorCode::ParseError,
-                        message: e.to_string(),
-                    },
-                }
+                })
             }
             QueryRequest::CompDb { build_dir } => {
-                match self.state.get_or_parse_manifest(&build_dir, "build.ninja") {
-                    Ok(cached) => {
-                        // Generate compilation database
-                        let mut entries = Vec::new();
-                        for build in &cached.manifest.builds {
-                            if let Some(rule) = cached.manifest.rules.get(&build.rule) {
-                                if let Some(cmd) = &rule.command {
-                                    for input in &build.inputs {
-                                        if input.ends_with(".c")
-                                            || input.ends_with(".cc")
-                                            || input.ends_with(".cpp")
-                                        {
-                                            entries.push(serde_json::json!({
-                                                "directory": build_dir.to_string_lossy(),
-                                                "command": cmd,
-                                                "file": input,
-                                            }));
-                                        }
+                self.with_manifest(&build_dir, |cached| {
+                    let mut entries = Vec::new();
+                    for build in &cached.manifest.builds {
+                        if let Some(rule) = cached.manifest.rules.get(&build.rule) {
+                            if let Some(cmd) = &rule.command {
+                                for input in &build.inputs {
+                                    if input.ends_with(".c")
+                                        || input.ends_with(".cc")
+                                        || input.ends_with(".cpp")
+                                    {
+                                        entries.push(serde_json::json!({
+                                            "directory": build_dir.to_string_lossy(),
+                                            "command": cmd,
+                                            "file": input,
+                                        }));
                                     }
                                 }
                             }
                         }
-                        match serde_json::to_string_pretty(&entries) {
-                            Ok(data) => DaemonResponse::QueryResult { data },
-                            Err(e) => DaemonResponse::Error {
-                                code: ErrorCode::ParseError,
-                                message: format!("Failed to serialize compilation database: {}", e),
-                            },
-                        }
                     }
-                    Err(e) => DaemonResponse::Error {
-                        code: ErrorCode::ParseError,
-                        message: e.to_string(),
-                    },
-                }
+                    match serde_json::to_string_pretty(&entries) {
+                        Ok(data) => DaemonResponse::QueryResult { data },
+                        Err(e) => DaemonResponse::Error {
+                            code: ErrorCode::ParseError,
+                            message: format!(
+                                "Failed to serialize compilation database: {}",
+                                e
+                            ),
+                        },
+                    }
+                })
             }
         }
     }

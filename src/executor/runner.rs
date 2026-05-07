@@ -1,6 +1,7 @@
-use std::process::{Command, Output, Stdio, ExitStatus};
+use std::process::{Command, Output, Stdio};
 use std::io;
 
+#[allow(dead_code)]
 /// Run a shell command and capture output
 pub fn run_command(cmd: &str) -> io::Result<Output> {
     Command::new("sh")
@@ -11,6 +12,7 @@ pub fn run_command(cmd: &str) -> io::Result<Output> {
         .output()
 }
 
+#[allow(dead_code)]
 /// Run a shell command, streaming output to stdout/stderr.
 ///
 /// Returns the exit code on success, or an error if:
@@ -27,13 +29,13 @@ pub fn run_command_streaming(cmd: &str) -> io::Result<i32> {
         Ok(code)
     } else {
         // Process was terminated by a signal - return an error to indicate this
-        Err(io::Error::new(
-            io::ErrorKind::Other,
+        Err(io::Error::other(
             "command was terminated by a signal",
         ))
     }
 }
 
+#[allow(dead_code)]
 /// Check if a command exists on PATH.
 ///
 /// Returns `true` if the command exists, `false` if it doesn't,

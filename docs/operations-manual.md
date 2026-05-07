@@ -391,7 +391,7 @@ rninja --daemon-socket /tmp/rninja.sock
 
 ```
 Daemon Status:
-  Version: 0.1.0
+  Version: 0.1.1
   Socket: /tmp/rninja-1000/daemon.sock
   Uptime: 2h 34m 12s
   Active builds: 1
@@ -478,7 +478,7 @@ Cache Health:
   Remote: OK
     - Connection: established
     - Latency: 8ms
-    - Server version: 0.1.0
+    - Server version: 0.1.1
 ```
 
 ### Cache Invalidation

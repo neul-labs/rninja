@@ -119,7 +119,7 @@ Check issues labeled:
 
 ## Version History
 
-### v0.1.0 (Current)
+### v0.1.1 (Current)
 
 - Initial release
 - Ninja compatibility

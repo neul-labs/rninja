@@ -1,3 +1,9 @@
+// Many modules contain code used by some binary targets but not all.
+// The main rninja binary compiles all modules directly; suppressing
+// dead-code warnings keeps CI practical while the project matures.
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 mod admin;
 mod buildlog;
 mod cache;

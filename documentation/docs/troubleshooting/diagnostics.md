@@ -20,7 +20,7 @@ rninja --version
 Output:
 
 ```
-rninja 0.1.0
+rninja 0.1.1
   Built with Rust 1.75.0
   Features: cache, daemon, remote
   Git: abc1234
@@ -211,7 +211,7 @@ Remote Cache Check:
   URL: tcp://cache.example.com:9876
   Connection: OK (5ms latency)
   Authentication: OK
-  Server version: 0.1.0
+  Server version: 0.1.1
   Server health: OK
 ```
 
