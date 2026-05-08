@@ -29,7 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pre-built binaries** for macOS (Intel & Apple Silicon) and Linux (x86_64 & aarch64).
 - **NPM wrapper** for global installation via `npm install -g rninja`.
 - **PyPI wrapper** for installation via `pip install rninja`.
-- **Snap packaging** for the Snap Store.
 
 ## [0.1.0] - 2024-12-01
 

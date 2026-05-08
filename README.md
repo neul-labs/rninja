@@ -35,10 +35,6 @@ pip install rninja
 cargo install rninja
 ```
 
-### Snap Store
-
-```bash
-sudo snap install rninja
 ```
 
 ### From GitHub Releases

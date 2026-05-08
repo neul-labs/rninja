@@ -54,14 +54,6 @@ pip install rninja
 
 The PyPI package downloads the correct prebuilt binary for your platform on first use.
 
-### Snap Store (Linux)
-
-On Linux distributions with snap support:
-
-```bash
-sudo snap install rninja
-```
-
 ### From Crates.io
 
 Install via Cargo:

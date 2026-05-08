@@ -166,17 +166,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: checksums
-          path: .github/npm-package
+          path: packages/npm
 
       - name: Update package.json version
         run: |
-          cd .github/npm-package
+          cd packages/npm
           sed -i "s/\"version\": \".*\"/\"version\": \"${{ steps.version.outputs.VERSION }}\"/" package.json
 
       - name: Publish to NPM
-        working-directory: .github/npm-package
+        working-directory: packages/npm
         run: |
-          npm publish
+          npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -251,43 +251,20 @@ jobs:
           python-version: '3.11'
 
       - name: Install build tools
-        run: pip install build twine
+        run: pip install build
 
       - name: Update version
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
-          sed -i "s/version = \".*\"/version = \"$VERSION\"/" .github/pypi-package/pyproject.toml
-          sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" .github/pypi-package/rninja/__init__.py
-          sed -i "s/VERSION = \".*\"/VERSION = \"$VERSION\"/" .github/pypi-package/rninja/cli.py
+          sed -i "s/version = \".*\"/version = \"$VERSION\"/" packages/pypi/pyproject.toml
+          sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" packages/pypi/rninja/__init__.py
+          sed -i "s/VERSION = \".*\"/VERSION = \"$VERSION\"/" packages/pypi/rninja/cli.py
 
       - name: Build package
-        working-directory: .github/pypi-package
+        working-directory: packages/pypi
         run: python -m build
 
       - name: Publish to PyPI
-        working-directory: .github/pypi-package
-        run: twine upload dist/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-
-  publish-snap:
-    name: Publish to Snap Store
-    needs: create-release
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Get version
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Set up Snapcraft
-        uses: snapcore/action-build@v1
-
-      - name: Publish to Snap Store
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-        run: |
-          snapcraft upload *.snap --release stable
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/pypi/dist
