@@ -228,10 +228,10 @@ jobs:
           python3 <<PYEOF
           import re
           formula = open("$FORMULA").read()
-          formula = re.sub(r'sha256 "placeholder_sha256"', f'sha256 "{DARWIN_AMD64}"', formula, count=1)
-          formula = re.sub(r'sha256 "placeholder_sha256"', f'sha256 "{DARWIN_ARM64}"', formula, count=1)
-          formula = re.sub(r'sha256 "placeholder_sha256"', f'sha256 "{LINUX_AMD64}"', formula, count=1)
-          formula = re.sub(r'sha256 "placeholder_sha256"', f'sha256 "{LINUX_ARM64}"', formula, count=1)
+          formula = re.sub(r'sha256 "placeholder_sha256"', 'sha256 "$DARWIN_AMD64"', formula, count=1)
+          formula = re.sub(r'sha256 "placeholder_sha256"', 'sha256 "$DARWIN_ARM64"', formula, count=1)
+          formula = re.sub(r'sha256 "placeholder_sha256"', 'sha256 "$LINUX_AMD64"', formula, count=1)
+          formula = re.sub(r'sha256 "placeholder_sha256"', 'sha256 "$LINUX_ARM64"', formula, count=1)
           open("$FORMULA", "w").write(formula)
           PYEOF
 
