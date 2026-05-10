@@ -126,8 +126,7 @@ impl Config {
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read config file: {}", e))?;
 
-        toml::from_str(&content)
-            .map_err(|e| format!("Failed to parse config file: {}", e))
+        toml::from_str(&content).map_err(|e| format!("Failed to parse config file: {}", e))
     }
 
     /// Get list of config file paths to check

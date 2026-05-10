@@ -159,7 +159,9 @@ impl<'a> Parser<'a> {
         let deps_str = parts.next().unwrap_or("");
 
         // Parse dependencies: inputs | implicit || order_only
-        let (explicit, rest) = deps_str.split_once("||").map_or((deps_str, ""), |(a, b)| (a, b));
+        let (explicit, rest) = deps_str
+            .split_once("||")
+            .map_or((deps_str, ""), |(a, b)| (a, b));
         let order_only: Vec<String> = rest
             .split_whitespace()
             .map(|s| self.expand_path(s))

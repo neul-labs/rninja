@@ -46,7 +46,10 @@ pub fn run_cache_stats(_verbose: bool, json: bool) -> Result<(), ExecError> {
         if json {
             println!(r#"{{"error": "cache directory does not exist"}}"#);
         } else {
-            eprintln!("Cache directory does not exist: {}", config.cache_dir.display());
+            eprintln!(
+                "Cache directory does not exist: {}",
+                config.cache_dir.display()
+            );
         }
         return Ok(());
     }
@@ -54,8 +57,10 @@ pub fn run_cache_stats(_verbose: bool, json: bool) -> Result<(), ExecError> {
     // Open sled database
     let db_path = config.cache_dir.join("index");
     let db = sled::open(&db_path).map_err(|e| {
-        ExecError::SpawnError(std::io::Error::other(format!("failed to open cache db: {}", e),
-        ))
+        ExecError::SpawnError(std::io::Error::other(format!(
+            "failed to open cache db: {}",
+            e
+        )))
     })?;
 
     // Collect statistics
@@ -105,8 +110,10 @@ pub fn run_cache_stats(_verbose: bool, json: bool) -> Result<(), ExecError> {
             Ok(s) => println!("{}", s),
             Err(e) => {
                 eprintln!("Error serializing cache stats report: {}", e);
-                return Err(ExecError::SpawnError(std::io::Error::other(format!("serialization error: {}", e),
-                )));
+                return Err(ExecError::SpawnError(std::io::Error::other(format!(
+                    "serialization error: {}",
+                    e
+                ))));
             }
         }
     } else {

@@ -2,7 +2,7 @@
 //!
 //! Generates JSON that can be loaded in:
 //! - chrome://tracing
-//! - https://ui.perfetto.dev
+//! - <https://ui.perfetto.dev>
 //! - Speedscope
 
 use parking_lot::Mutex;
@@ -260,9 +260,7 @@ impl BuildTrace {
             .filter(|e| e.phase == "X" && e.duration_us.is_some())
             .collect();
 
-        complete_events.sort_by(|a, b| {
-            b.duration_us.unwrap_or(0).cmp(&a.duration_us.unwrap_or(0))
-        });
+        complete_events.sort_by(|a, b| b.duration_us.unwrap_or(0).cmp(&a.duration_us.unwrap_or(0)));
 
         complete_events
             .iter()
@@ -289,21 +287,16 @@ impl BuildTrace {
     /// Get build statistics
     pub fn stats(&self) -> TraceStats {
         let events = self.events.lock();
-        let complete_events: Vec<_> = events
-            .iter()
-            .filter(|e| e.phase == "X")
-            .collect();
+        let complete_events: Vec<_> = events.iter().filter(|e| e.phase == "X").collect();
 
         let total_targets = complete_events.len();
-        let total_time_us: u64 = complete_events
-            .iter()
-            .filter_map(|e| e.duration_us)
-            .sum();
+        let total_time_us: u64 = complete_events.iter().filter_map(|e| e.duration_us).sum();
 
         let cache_hits = complete_events
             .iter()
             .filter(|e| {
-                e.args.as_ref()
+                e.args
+                    .as_ref()
                     .map(|a| a.get("cache").map(|v| v == "hit").unwrap_or(false))
                     .unwrap_or(false)
             })

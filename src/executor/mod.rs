@@ -23,9 +23,18 @@ use tracing::{debug, info};
 /// variables. A full implementation may need to be configurable per-project.
 fn collect_relevant_env_vars() -> Vec<(&'static str, String)> {
     const KEYS: [&str; 12] = [
-        "CC", "CXX", "LD", "AR", "RANLIB", "STRIP",
-        "CFLAGS", "CXXFLAGS", "LDFLAGS", "CPPFLAGS",
-        "RUSTFLAGS", "PATH",
+        "CC",
+        "CXX",
+        "LD",
+        "AR",
+        "RANLIB",
+        "STRIP",
+        "CFLAGS",
+        "CXXFLAGS",
+        "LDFLAGS",
+        "CPPFLAGS",
+        "RUSTFLAGS",
+        "PATH",
     ];
     KEYS.iter()
         .filter_map(|&k| std::env::var(k).ok().map(|v| (k, v)))
@@ -141,7 +150,11 @@ struct InvalidTransition {
 
 impl std::fmt::Display for InvalidTransition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid node state transition: {:?} -> {:?}", self.from, self.to)
+        write!(
+            f,
+            "invalid node state transition: {:?} -> {:?}",
+            self.from, self.to
+        )
     }
 }
 
@@ -154,8 +167,9 @@ impl NodeState {
             | (NodeState::Pending, NodeState::Running)
             | (NodeState::Pending, NodeState::Cancelled) => Ok(new),
             // From Ready
-            (NodeState::Ready, NodeState::Running)
-            | (NodeState::Ready, NodeState::Cancelled) => Ok(new),
+            (NodeState::Ready, NodeState::Running) | (NodeState::Ready, NodeState::Cancelled) => {
+                Ok(new)
+            }
             // From Running
             (NodeState::Running, NodeState::Completed)
             | (NodeState::Running, NodeState::Failed)
@@ -286,7 +300,11 @@ impl BuildState {
     fn get_pool_semaphore(&self, pool: Option<&str>) -> Arc<Semaphore> {
         match pool {
             Some("console") => self.console_semaphore.clone(),
-            Some(name) => self.pools.get(name).cloned().unwrap_or(self.job_semaphore.clone()),
+            Some(name) => self
+                .pools
+                .get(name)
+                .cloned()
+                .unwrap_or(self.job_semaphore.clone()),
             None => self.job_semaphore.clone(),
         }
     }
@@ -308,8 +326,17 @@ impl BuildState {
         self.trace.begin_target(target, command, tid)
     }
 
-    fn trace_complete(&self, target: &str, start_us: u64, duration_us: u64, tid: u32, command: Option<&str>, cache_hit: bool) {
-        self.trace.complete_target(target, start_us, duration_us, tid, command, cache_hit);
+    fn trace_complete(
+        &self,
+        target: &str,
+        start_us: u64,
+        duration_us: u64,
+        tid: u32,
+        command: Option<&str>,
+        cache_hit: bool,
+    ) {
+        self.trace
+            .complete_target(target, start_us, duration_us, tid, command, cache_hit);
     }
 }
 
@@ -360,7 +387,10 @@ impl Executor {
     /// Handle the result of a completed task
     #[allow(clippy::type_complexity)]
     fn handle_task_result(
-        result: Result<Result<(String, bool, Option<String>), (String, ExecError)>, tokio::task::JoinError>,
+        result: Result<
+            Result<(String, bool, Option<String>), (String, ExecError)>,
+            tokio::task::JoinError,
+        >,
         cache: &Option<Cache>,
     ) {
         match result {
@@ -439,7 +469,8 @@ impl Executor {
             JsonEvent::BuildStarted {
                 total_targets: total,
                 parallelism: self.config.parallelism,
-            }.emit();
+            }
+            .emit();
         }
 
         // Create build trace (enabled if trace_file is set)
@@ -540,10 +571,7 @@ impl Executor {
                                 restored = true;
                             }
                             Ok(false) => {
-                                debug!(
-                                    "Cache entry found but blob missing for {}",
-                                    path
-                                );
+                                debug!("Cache entry found but blob missing for {}", path);
                             }
                             Err(e) => {
                                 debug!("Cache restore failed for {}: {}", path, e);
@@ -572,14 +600,7 @@ impl Executor {
                     }
                     let tid = state.allocate_tid();
                     let trace_start = state.trace.timestamp();
-                    state.trace_complete(
-                        &path,
-                        trace_start,
-                        0,
-                        tid,
-                        command.as_deref(),
-                        true,
-                    );
+                    state.trace_complete(&path, trace_start, 0, tid, command.as_deref(), true);
                     continue;
                 }
 
@@ -594,8 +615,13 @@ impl Executor {
                         Err(e) => {
                             tracing::error!("Failed to acquire semaphore: {}", e);
                             state.mark_failed(&path);
-                            return Err((path, ExecError::SpawnError(std::io::Error::other(format!("semaphore error: {}", e),
-                            ))));
+                            return Err((
+                                path,
+                                ExecError::SpawnError(std::io::Error::other(format!(
+                                    "semaphore error: {}",
+                                    e
+                                ))),
+                            ));
                         }
                     };
 
@@ -693,9 +719,18 @@ impl Executor {
                 targets_built: finish_count,
                 targets_total: total,
                 duration_ms: stats.total_time.as_millis() as u64,
-                cache_hits: if cache_hits > 0 { Some(cache_hits) } else { None },
-                cache_misses: if cache_misses > 0 { Some(cache_misses) } else { None },
-            }.emit();
+                cache_hits: if cache_hits > 0 {
+                    Some(cache_hits)
+                } else {
+                    None
+                },
+                cache_misses: if cache_misses > 0 {
+                    Some(cache_misses)
+                } else {
+                    None
+                },
+            }
+            .emit();
         }
 
         // Write trace file if configured
@@ -742,19 +777,19 @@ impl Executor {
 }
 
 /// Execute a single node asynchronously.
- ///
- /// Returns `Ok((path, executed, cache_key))` where:
- /// - `executed` is `true` if the command was run, `false` if restored from cache
- /// - `cache_key` is the action key if the command was executed
- ///
- /// # Security Warning
- ///
- /// Commands are executed via `sh -c` for shell compatibility with ninja build
- /// files. This means shell injection is possible if build rules contain untrusted
- /// input. Only use build files from trusted sources. Consider running rninja
- /// with `--dry-run` for untrusted projects.
+///
+/// Returns `Ok((path, executed, cache_key))` where:
+/// - `executed` is `true` if the command was run, `false` if restored from cache
+/// - `cache_key` is the action key if the command was executed
+///
+/// # Security Warning
+///
+/// Commands are executed via `sh -c` for shell compatibility with ninja build
+/// files. This means shell injection is possible if build rules contain untrusted
+/// input. Only use build files from trusted sources. Consider running rninja
+/// with `--dry-run` for untrusted projects.
 #[allow(clippy::too_many_arguments)]
- async fn execute_node_async(
+async fn execute_node_async(
     path: &str,
     command: Option<&str>,
     description: Option<&str>,
@@ -798,7 +833,8 @@ impl Executor {
                 index: idx,
                 total,
                 command: if config.verbose { Some(command) } else { None },
-            }.emit();
+            }
+            .emit();
         }
     }
 
@@ -812,8 +848,16 @@ impl Executor {
         tokio::fs::write(rsp, content).await?;
     }
 
-    let shell = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
-    let shell_arg = if cfg!(target_os = "windows") { "/C" } else { "-c" };
+    let shell = if cfg!(target_os = "windows") {
+        "cmd"
+    } else {
+        "sh"
+    };
+    let shell_arg = if cfg!(target_os = "windows") {
+        "/C"
+    } else {
+        "-c"
+    };
 
     // Execute the command
     let output = Command::new(shell)
@@ -857,7 +901,8 @@ impl Executor {
                 total,
                 success: true,
                 error: None,
-            }.emit();
+            }
+            .emit();
         }
         Ok(true) // Command was executed
     } else {
@@ -871,7 +916,8 @@ impl Executor {
                 total,
                 success: false,
                 error: Some(&error_msg),
-            }.emit();
+            }
+            .emit();
         }
         Err(ExecError::CommandFailed {
             command: command.to_string(),

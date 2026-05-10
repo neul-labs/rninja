@@ -1,6 +1,9 @@
 # rninja
 
 [![Crates.io](https://img.shields.io/crates/v/rninja.svg)](https://crates.io/crates/rninja)
+[![npm](https://img.shields.io/npm/v/rninja-cli)](https://www.npmjs.com/package/rninja-cli)
+[![PyPI](https://img.shields.io/pypi/v/rninja-cli)](https://pypi.org/project/rninja-cli/)
+[![CI](https://github.com/neul-labs/rninja/actions/workflows/ci.yml/badge.svg)](https://github.com/neul-labs/rninja/actions)
 [![Documentation](https://img.shields.io/badge/docs-neullabs.com-blue)](https://docs.neullabs.com/rninja)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 

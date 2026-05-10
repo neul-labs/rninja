@@ -169,10 +169,7 @@ pub enum Response {
     Error { code: ErrorCode, message: String },
 
     /// Pong response to ping
-    Pong {
-        version: String,
-        server_time: u64,
-    },
+    Pong { version: String, server_time: u64 },
 
     /// Server statistics
     Statistics {

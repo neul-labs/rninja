@@ -44,16 +44,20 @@ impl SchemaInfo {
     /// Serialize to bytes
     pub fn serialize(&self) -> Result<Vec<u8>, ExecError> {
         serde_json::to_vec(self).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::other(format!("failed to serialize schema info: {}", e),
-            ))
+            ExecError::SpawnError(std::io::Error::other(format!(
+                "failed to serialize schema info: {}",
+                e
+            )))
         })
     }
 
     /// Deserialize from bytes
     pub fn deserialize(data: &[u8]) -> Result<Self, ExecError> {
         serde_json::from_slice(data).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::other(format!("failed to deserialize schema info: {}", e),
-            ))
+            ExecError::SpawnError(std::io::Error::other(format!(
+                "failed to deserialize schema info: {}",
+                e
+            )))
         })
     }
 }
@@ -96,8 +100,10 @@ pub fn check_and_migrate(db: &sled::Db, auto_migrate: bool) -> Result<SchemaInfo
                     };
 
                     db.insert(SCHEMA_KEY, new_info.serialize()?).map_err(|e| {
-                        ExecError::SpawnError(std::io::Error::other(format!("failed to update schema: {}", e),
-                        ))
+                        ExecError::SpawnError(std::io::Error::other(format!(
+                            "failed to update schema: {}",
+                            e
+                        )))
                     })?;
 
                     Ok(new_info)
@@ -109,10 +115,9 @@ pub fn check_and_migrate(db: &sled::Db, auto_migrate: bool) -> Result<SchemaInfo
                 }
             } else if info.version > CURRENT_SCHEMA_VERSION {
                 Err(ExecError::SpawnError(std::io::Error::other(format!(
-                        "cache was created by newer rninja (schema v{}), current version supports v{}",
-                        info.version, CURRENT_SCHEMA_VERSION
-                    ),
-                )))
+                    "cache was created by newer rninja (schema v{}), current version supports v{}",
+                    info.version, CURRENT_SCHEMA_VERSION
+                ))))
             } else {
                 Ok(info)
             }
@@ -121,14 +126,18 @@ pub fn check_and_migrate(db: &sled::Db, auto_migrate: bool) -> Result<SchemaInfo
             // New database - initialize schema
             let info = SchemaInfo::current();
             db.insert(SCHEMA_KEY, info.serialize()?).map_err(|e| {
-                ExecError::SpawnError(std::io::Error::other(format!("failed to initialize schema: {}", e),
-                ))
+                ExecError::SpawnError(std::io::Error::other(format!(
+                    "failed to initialize schema: {}",
+                    e
+                )))
             })?;
             tracing::info!("Initialized cache schema v{}", CURRENT_SCHEMA_VERSION);
             Ok(info)
         }
-        Err(e) => Err(ExecError::SpawnError(std::io::Error::other(format!("failed to read schema: {}", e),
-        ))),
+        Err(e) => Err(ExecError::SpawnError(std::io::Error::other(format!(
+            "failed to read schema: {}",
+            e
+        )))),
     }
 }
 

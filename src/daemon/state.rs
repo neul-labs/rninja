@@ -116,10 +116,7 @@ impl DaemonState {
                     included_files: cached.included_files.clone(),
                 }));
             }
-            debug!(
-                "Manifest changed for {}, reparsing",
-                build_dir.display()
-            );
+            debug!("Manifest changed for {}, reparsing", build_dir.display());
         }
 
         // Parse the manifest
@@ -158,14 +155,17 @@ impl DaemonState {
             }
         }
 
-        manifests.insert(build_dir.clone(), CachedManifest {
-            manifest: cached.manifest.clone(),
-            graph: cached.graph.clone(),
-            build_log: cached.build_log.clone(),
-            fingerprint: cached.fingerprint,
-            last_validated: cached.last_validated,
-            included_files: cached.included_files.clone(),
-        });
+        manifests.insert(
+            build_dir.clone(),
+            CachedManifest {
+                manifest: cached.manifest.clone(),
+                graph: cached.graph.clone(),
+                build_log: cached.build_log.clone(),
+                fingerprint: cached.fingerprint,
+                last_validated: cached.last_validated,
+                included_files: cached.included_files.clone(),
+            },
+        );
 
         Ok(Arc::new(cached))
     }
@@ -209,8 +209,8 @@ impl DaemonState {
 
 /// Compute a fingerprint for a manifest file
 fn compute_fingerprint(path: &PathBuf) -> anyhow::Result<u64> {
-    use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
     let metadata = std::fs::metadata(path)?;
     let mtime = metadata

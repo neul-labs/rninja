@@ -6,10 +6,10 @@ pub mod remote;
 pub mod schema;
 
 pub use blob::BlobStore;
-pub use schema::{check_and_migrate, SchemaInfo, CURRENT_SCHEMA_VERSION};
 pub use config::{CacheConfig, CacheMode, PullPolicy, PushPolicy, RemoteCacheConfig};
 pub use entry::CacheEntry;
 pub use remote::{RemoteCacheClient, RemoteCacheError, RemoteClientConfig, WireCacheEntry};
+pub use schema::{check_and_migrate, SchemaInfo, CURRENT_SCHEMA_VERSION};
 
 /// Re-export [`CacheError`] for convenience in cache-related code.
 pub use crate::error::CacheError;
@@ -85,9 +85,8 @@ impl Cache {
     /// Returns `CacheError::BlobIo` for blob store initialization errors.
     pub fn open(config: CacheConfig) -> Result<Self, CacheError> {
         let cache_dir = &config.cache_dir;
-        std::fs::create_dir_all(cache_dir).map_err(|e| {
-            CacheError::CacheDir(format!("failed to create cache dir: {}", e))
-        })?;
+        std::fs::create_dir_all(cache_dir)
+            .map_err(|e| CacheError::CacheDir(format!("failed to create cache dir: {}", e)))?;
 
         let db_path = cache_dir.join("index");
         let db = sled::open(&db_path)?;
@@ -114,10 +113,7 @@ impl Cache {
 
             match RemoteCacheClient::new(remote_config) {
                 Ok(client) => {
-                    info!(
-                        "Remote cache configured: {}",
-                        config.remote.server_addr
-                    );
+                    info!("Remote cache configured: {}", config.remote.server_addr);
                     Some(client)
                 }
                 Err(e) => {
@@ -151,7 +147,10 @@ impl Cache {
 
     /// Check if remote cache is connected
     pub fn has_remote(&self) -> bool {
-        self.remote.as_ref().map(|r| r.is_connected()).unwrap_or(false)
+        self.remote
+            .as_ref()
+            .map(|r| r.is_connected())
+            .unwrap_or(false)
     }
 
     /// Connect to remote cache (if configured)
@@ -332,7 +331,9 @@ impl Cache {
         };
 
         // Serialize and store
-        let data = entry.serialize().map_err(|e| CacheError::Serialization(e.to_string()))?;
+        let data = entry
+            .serialize()
+            .map_err(|e| CacheError::Serialization(e.to_string()))?;
         self.db.insert(key.as_bytes(), data)?;
 
         debug!("Cached result locally for {}", key);
@@ -346,12 +347,7 @@ impl Cache {
     /// # Errors
     ///
     /// See [`CacheError`] for possible errors.
-    pub fn store(
-        &self,
-        key: &str,
-        outputs: &[&Path],
-        command: &str,
-    ) -> Result<(), CacheError> {
+    pub fn store(&self, key: &str, outputs: &[&Path], command: &str) -> Result<(), CacheError> {
         self.store_local(key, outputs, command)?;
         Ok(())
     }
@@ -374,11 +370,8 @@ impl Cache {
         if self.should_push() {
             if let Some(ref client) = self.remote {
                 if client.is_connected() {
-                    let wire_entry = WireCacheEntry::from_entry(
-                        &entry.command,
-                        &entry.outputs,
-                        entry.created,
-                    );
+                    let wire_entry =
+                        WireCacheEntry::from_entry(&entry.command, &entry.outputs, entry.created);
 
                     // Push entry metadata
                     if let Err(e) = client.push_entry(key, &wire_entry).await {
@@ -447,7 +440,11 @@ impl Cache {
         for (key, value) in self.db.iter().flatten() {
             if let Ok(entry) = CacheEntry::deserialize(&value) {
                 let should_remove = if let Some(max_age) = self.config.max_age {
-                    entry.created.elapsed().map(|e| e > max_age).unwrap_or(false)
+                    entry
+                        .created
+                        .elapsed()
+                        .map(|e| e > max_age)
+                        .unwrap_or(false)
                 } else {
                     false
                 };

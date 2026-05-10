@@ -27,9 +27,9 @@ fn parse_content(content: &str) -> io::Result<DepfileResult> {
     let content = content.replace("\\\n", " ").replace("\\\r\n", " ");
 
     // Split on first colon
-    let (target, deps) = content.split_once(':').ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidData, "depfile missing ':'")
-    })?;
+    let (target, deps) = content
+        .split_once(':')
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "depfile missing ':'"))?;
 
     result.target = target.trim().to_string();
 

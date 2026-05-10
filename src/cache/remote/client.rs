@@ -93,7 +93,8 @@ pub struct ClientStats {
 impl ClientStats {
     pub fn record_request(&self, bytes_sent: usize, bytes_received: usize) {
         self.requests_sent.fetch_add(1, Ordering::Relaxed);
-        self.bytes_sent.fetch_add(bytes_sent as u64, Ordering::Relaxed);
+        self.bytes_sent
+            .fetch_add(bytes_sent as u64, Ordering::Relaxed);
         self.bytes_received
             .fetch_add(bytes_received as u64, Ordering::Relaxed);
     }
@@ -178,9 +179,7 @@ impl ConnectionState {
             (ConnectionState::Connecting, ConnectionState::Connected { .. }) => true,
             (ConnectionState::Connecting, ConnectionState::Disconnected) => true,
             (ConnectionState::Connected { .. }, ConnectionState::Disconnected) => true,
-            (from, to) if std::mem::discriminant(from) == std::mem::discriminant(to) => {
-                true
-            }
+            (from, to) if std::mem::discriminant(from) == std::mem::discriminant(to) => true,
             _ => false,
         };
         if valid {
@@ -281,10 +280,14 @@ impl RemoteCacheClient {
         // Set timeouts
         socket
             .set_opt::<nng::options::SendTimeout>(Some(self.config.request_timeout))
-            .map_err(|e| RemoteCacheError::ConfigError(format!("failed to set send timeout: {}", e)))?;
+            .map_err(|e| {
+                RemoteCacheError::ConfigError(format!("failed to set send timeout: {}", e))
+            })?;
         socket
             .set_opt::<nng::options::RecvTimeout>(Some(self.config.request_timeout))
-            .map_err(|e| RemoteCacheError::ConfigError(format!("failed to set recv timeout: {}", e)))?;
+            .map_err(|e| {
+                RemoteCacheError::ConfigError(format!("failed to set recv timeout: {}", e))
+            })?;
 
         // Connect with timeout (blocking call offloaded to spawn_blocking)
         let addr = self.config.server_addr.clone();
@@ -292,16 +295,20 @@ impl RemoteCacheClient {
 
         let socket = tokio::time::timeout(self.config.connect_timeout, async {
             tokio::task::spawn_blocking(move || {
-                socket.dial(&addr).map_err(|e| {
-                    RemoteCacheError::ConnectionFailed(e.to_string())
-                })?;
+                socket
+                    .dial(&addr)
+                    .map_err(|e| RemoteCacheError::ConnectionFailed(e.to_string()))?;
                 Ok::<_, RemoteCacheError>(socket)
             })
             .await
-            .map_err(|e| RemoteCacheError::ConnectionFailed(format!("blocking task panicked: {}", e)))?
+            .map_err(|e| {
+                RemoteCacheError::ConnectionFailed(format!("blocking task panicked: {}", e))
+            })?
         })
         .await
-        .map_err(|_| RemoteCacheError::ConnectionTimeout(self.config.connect_timeout.as_millis() as u64))??;
+        .map_err(|_| {
+            RemoteCacheError::ConnectionTimeout(self.config.connect_timeout.as_millis() as u64)
+        })??;
 
         // Verify connection with ping before declaring Connected
         {
@@ -379,9 +386,7 @@ impl RemoteCacheClient {
             match &*guard {
                 ConnectionState::Connected { socket } => socket.clone(),
                 _ => {
-                    return Err(RemoteCacheError::ConnectionFailed(
-                        "not connected".into(),
-                    ));
+                    return Err(RemoteCacheError::ConnectionFailed("not connected".into()));
                 }
             }
         };
@@ -430,10 +435,7 @@ impl RemoteCacheClient {
         for attempt in 0..=self.config.retry.max_retries {
             if attempt > 0 {
                 self.stats.record_retry();
-                debug!(
-                    "Retry attempt {} after {:?}",
-                    attempt, backoff
-                );
+                debug!("Retry attempt {} after {:?}", attempt, backoff);
                 tokio::time::sleep(backoff).await;
                 backoff = (backoff * 2).min(self.config.retry.max_backoff);
             }
@@ -452,7 +454,8 @@ impl RemoteCacheClient {
         }
 
         self.stats.record_failure();
-        Err(last_error.unwrap_or_else(|| RemoteCacheError::NetworkError("max retries exceeded".into())))
+        Err(last_error
+            .unwrap_or_else(|| RemoteCacheError::NetworkError("max retries exceeded".into())))
     }
 
     /// Ping the server

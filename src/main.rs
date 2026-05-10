@@ -364,7 +364,9 @@ fn run_tool(tool: &str, cli: &Cli) -> Result<()> {
                 let path = std::path::Path::new(output);
                 if path.exists() {
                     if let Some(node) = graph.get_node(output) {
-                        let cmd_hash = node.command.as_ref()
+                        let cmd_hash = node
+                            .command
+                            .as_ref()
                             .map(|c| buildlog::hash_command(c))
                             .unwrap_or(0);
                         log.record(output, cmd_hash, 0, 0);
@@ -475,9 +477,13 @@ fn run_tool(tool: &str, cli: &Cli) -> Result<()> {
                         // Create entry for each input file (typically source files)
                         for input in &build.inputs {
                             // Only include actual source files, not intermediate outputs
-                            if input.ends_with(".c") || input.ends_with(".cc")
-                                || input.ends_with(".cpp") || input.ends_with(".cxx")
-                                || input.ends_with(".m") || input.ends_with(".mm") {
+                            if input.ends_with(".c")
+                                || input.ends_with(".cc")
+                                || input.ends_with(".cpp")
+                                || input.ends_with(".cxx")
+                                || input.ends_with(".m")
+                                || input.ends_with(".mm")
+                            {
                                 entries.push(serde_json::json!({
                                     "directory": cwd.to_string_lossy(),
                                     "command": command,
@@ -560,7 +566,8 @@ fn expand_variables(input: &str, variables: &HashMap<String, String>) -> String 
                 i += 1;
                 continue;
             } else {
-                let end = rest.find(|c: char| !c.is_alphanumeric() && c != '_')
+                let end = rest
+                    .find(|c: char| !c.is_alphanumeric() && c != '_')
                     .unwrap_or(rest.len());
                 if end > 0 {
                     let var_name = &rest[..end];

@@ -121,10 +121,7 @@ impl BuildSession {
                 true
             }
             Err(e) => {
-                tracing::warn!(
-                    "Session {}: attempted invalid transition: {}",
-                    self.id, e
-                );
+                tracing::warn!("Session {}: attempted invalid transition: {}", self.id, e);
                 false
             }
         }
@@ -142,10 +139,7 @@ impl BuildSession {
                 true
             }
             Err(e) => {
-                tracing::warn!(
-                    "Session {}: attempted invalid transition: {}",
-                    self.id, e
-                );
+                tracing::warn!("Session {}: attempted invalid transition: {}", self.id, e);
                 false
             }
         }
@@ -162,8 +156,17 @@ impl BuildSession {
     }
 
     /// Record that a target build started
-    pub fn target_started(&self, target: &str, index: usize, total: usize, command: Option<String>) {
-        debug!("Session {}: target started {}/{} - {}", self.id, index, total, target);
+    pub fn target_started(
+        &self,
+        target: &str,
+        index: usize,
+        total: usize,
+        command: Option<String>,
+    ) {
+        debug!(
+            "Session {}: target started {}/{} - {}",
+            self.id, index, total, target
+        );
         self.queue_response(DaemonResponse::TargetStarted {
             target: target.to_string(),
             index,
@@ -318,9 +321,7 @@ impl SessionManager {
         let mut sessions = self.sessions.write();
         let cutoff = std::time::Duration::from_secs(max_age_secs);
 
-        sessions.retain(|_, session| {
-            session.is_running() || session.started.elapsed() < cutoff
-        });
+        sessions.retain(|_, session| session.is_running() || session.started.elapsed() < cutoff);
     }
 }
 

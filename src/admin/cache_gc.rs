@@ -45,14 +45,19 @@ pub fn run_cache_gc(options: GcOptions, verbose: bool) -> Result<GcReport, ExecE
     let config = CacheConfig::from_env();
 
     if !config.cache_dir.exists() {
-        eprintln!("Cache directory does not exist: {}", config.cache_dir.display());
+        eprintln!(
+            "Cache directory does not exist: {}",
+            config.cache_dir.display()
+        );
         return Ok(GcReport::default());
     }
 
     let db_path = config.cache_dir.join("index");
     let db = sled::open(&db_path).map_err(|e| {
-        ExecError::SpawnError(std::io::Error::other(format!("failed to open cache db: {}", e),
-        ))
+        ExecError::SpawnError(std::io::Error::other(format!(
+            "failed to open cache db: {}",
+            e
+        )))
     })?;
 
     let mut report = GcReport {
@@ -161,7 +166,11 @@ pub fn run_cache_gc(options: GcOptions, verbose: bool) -> Result<GcReport, ExecE
     }
 
     // Print summary
-    let action = if options.dry_run { "Would remove" } else { "Removed" };
+    let action = if options.dry_run {
+        "Would remove"
+    } else {
+        "Removed"
+    };
     info!(
         "GC complete: {} {} expired entries ({} bytes), {} orphan blobs ({} bytes), {} evicted ({} bytes)",
         action,

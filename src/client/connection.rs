@@ -62,14 +62,18 @@ impl DaemonClient {
 
     /// Try to connect to the daemon without spawning
     fn try_connect(&self) -> Result<nng::Socket> {
-        let socket = nng::Socket::new(nng::Protocol::Req0)
-            .context("Failed to create NNG socket")?;
+        let socket =
+            nng::Socket::new(nng::Protocol::Req0).context("Failed to create NNG socket")?;
 
         // Set timeouts
-        if let Err(e) = socket.set_opt::<nng::options::RecvTimeout>(Some(Duration::from_millis(CONNECT_TIMEOUT_MS))) {
+        if let Err(e) = socket
+            .set_opt::<nng::options::RecvTimeout>(Some(Duration::from_millis(CONNECT_TIMEOUT_MS)))
+        {
             tracing::warn!("Failed to set receive timeout: {}", e);
         }
-        if let Err(e) = socket.set_opt::<nng::options::SendTimeout>(Some(Duration::from_millis(CONNECT_TIMEOUT_MS))) {
+        if let Err(e) = socket
+            .set_opt::<nng::options::SendTimeout>(Some(Duration::from_millis(CONNECT_TIMEOUT_MS)))
+        {
             tracing::warn!("Failed to set send timeout: {}", e);
         }
 
@@ -84,7 +88,10 @@ impl DaemonClient {
         // Try connecting to existing daemon first
         match self.try_connect() {
             Ok(socket) => {
-                debug!("Connected to existing daemon at {}", self.socket_path.display());
+                debug!(
+                    "Connected to existing daemon at {}",
+                    self.socket_path.display()
+                );
 
                 // Verify protocol version
                 let conn = DaemonConnection { socket };
@@ -112,40 +119,39 @@ impl DaemonClient {
         while start.elapsed() < timeout {
             match self.try_connect() {
                 Ok(socket) => {
-                    info!(
-                        "Daemon started in {:?}",
-                        start.elapsed()
-                    );
+                    info!("Daemon started in {:?}", start.elapsed());
                     let conn = DaemonConnection { socket };
                     conn.verify_version()?;
                     return Ok(conn);
                 }
                 Err(e) => {
-                    let attempt = (start.elapsed().as_millis() / u128::from(CONNECT_RETRY_INTERVAL_MS)) as u64;
+                    let attempt = (start.elapsed().as_millis()
+                        / u128::from(CONNECT_RETRY_INTERVAL_MS))
+                        as u64;
                     debug!("Waiting for daemon (attempt {}): {}", attempt, e);
                     std::thread::sleep(Duration::from_millis(CONNECT_RETRY_INTERVAL_MS));
                 }
             }
         }
 
-        anyhow::bail!(
-            "Daemon failed to start within {:?}",
-            timeout
-        )
+        anyhow::bail!("Daemon failed to start within {:?}", timeout)
     }
 
     /// Spawn the daemon process
     fn spawn_daemon(&self) -> Result<()> {
         // Ensure socket directory exists
         if let Some(parent) = self.socket_path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create socket directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create socket directory")?;
         }
 
         // Find rninja-daemon binary
         let daemon_path = find_daemon_binary()?;
 
-        debug!("Starting daemon: {} --socket {}", daemon_path.display(), self.socket_path.display());
+        debug!(
+            "Starting daemon: {} --socket {}",
+            daemon_path.display(),
+            self.socket_path.display()
+        );
 
         // Spawn daemon as a detached process
         Command::new(&daemon_path)
@@ -179,17 +185,16 @@ impl DaemonConnection {
     /// Send a request and receive a response
     pub fn request(&self, request: DaemonRequest) -> Result<DaemonResponse> {
         let envelope = RequestEnvelope::new(request);
-        let data = serialize_request(&envelope)
-            .context("Failed to serialize request")?;
+        let data = serialize_request(&envelope).context("Failed to serialize request")?;
 
         let msg = nng::Message::from(&data[..]);
-        self.socket.send(msg).map_err(|(_, e)| anyhow::anyhow!("Send failed: {}", e))?;
+        self.socket
+            .send(msg)
+            .map_err(|(_, e)| anyhow::anyhow!("Send failed: {}", e))?;
 
-        let response_msg = self.socket.recv()
-            .context("Failed to receive response")?;
+        let response_msg = self.socket.recv().context("Failed to receive response")?;
 
-        deserialize_response(response_msg.as_slice())
-            .context("Failed to deserialize response")
+        deserialize_response(response_msg.as_slice()).context("Failed to deserialize response")
     }
 
     /// Verify protocol version compatibility
@@ -279,7 +284,10 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = DaemonClient::new();
-        assert!(client.socket_path().to_string_lossy().contains("daemon.sock"));
+        assert!(client
+            .socket_path()
+            .to_string_lossy()
+            .contains("daemon.sock"));
     }
 
     #[test]

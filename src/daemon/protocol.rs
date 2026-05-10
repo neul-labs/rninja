@@ -97,7 +97,10 @@ pub enum QueryRequest {
     Rules { build_dir: PathBuf },
 
     /// Show commands for targets
-    Commands { build_dir: PathBuf, targets: Vec<String> },
+    Commands {
+        build_dir: PathBuf,
+        targets: Vec<String>,
+    },
 
     /// Show dependencies
     Deps { build_dir: PathBuf, target: String },
@@ -341,10 +344,7 @@ mod tests {
 
     #[test]
     fn test_build_request() {
-        let req = BuildRequest::new(
-            generate_session_id(),
-            PathBuf::from("/home/user/project"),
-        );
+        let req = BuildRequest::new(generate_session_id(), PathBuf::from("/home/user/project"));
         assert_eq!(req.build_file, "build.ninja");
         assert!(!req.dry_run);
     }

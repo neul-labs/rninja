@@ -104,7 +104,6 @@ impl From<CacheError> for ExecError {
     /// This allows cache operations to fail gracefully within the build
     /// pipeline without stopping the entire build.
     fn from(e: CacheError) -> Self {
-        ExecError::SpawnError(std::io::Error::other(format!("cache error: {}", e),
-        ))
+        ExecError::SpawnError(std::io::Error::other(format!("cache error: {}", e)))
     }
 }

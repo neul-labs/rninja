@@ -44,7 +44,11 @@ async fn main() {
     let cli = Cli::parse();
 
     // Initialize logging
-    let level = if cli.verbose { Level::DEBUG } else { Level::INFO };
+    let level = if cli.verbose {
+        Level::DEBUG
+    } else {
+        Level::INFO
+    };
     let subscriber = FmtSubscriber::builder()
         .with_max_level(level)
         .with_target(false)
@@ -93,7 +97,10 @@ async fn main() {
     if let Some(max_size) = config.max_storage_size {
         info!("Max storage size: {} bytes", max_size);
     }
-    info!("Authentication: {} tokens configured", config.auth.tokens.len());
+    info!(
+        "Authentication: {} tokens configured",
+        config.auth.tokens.len()
+    );
 
     // Run server
     if let Err(e) = run_server(config).await {

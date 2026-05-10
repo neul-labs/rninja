@@ -37,15 +37,19 @@ impl CacheServer {
     pub fn new(config: ServerConfig) -> Result<Self, ExecError> {
         // Create storage directory
         std::fs::create_dir_all(&config.storage_dir).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::other(format!("failed to create storage dir: {}", e),
-            ))
+            ExecError::SpawnError(std::io::Error::other(format!(
+                "failed to create storage dir: {}",
+                e
+            )))
         })?;
 
         // Open sled database
         let db_path = config.storage_dir.join("index");
         let db = sled::open(&db_path).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::other(format!("failed to open database: {}", e),
-            ))
+            ExecError::SpawnError(std::io::Error::other(format!(
+                "failed to open database: {}",
+                e
+            )))
         })?;
 
         // Open blob store
@@ -73,13 +77,17 @@ impl CacheServer {
     /// Run the server main loop
     pub async fn run(&self) -> Result<(), ExecError> {
         let socket = nng::Socket::new(nng::Protocol::Rep0).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::other(format!("failed to create socket: {}", e),
-            ))
+            ExecError::SpawnError(std::io::Error::other(format!(
+                "failed to create socket: {}",
+                e
+            )))
         })?;
 
         socket.listen(&self.config.listen_addr).map_err(|e| {
-            ExecError::SpawnError(std::io::Error::other(format!("failed to listen on {}: {}", self.config.listen_addr, e),
-            ))
+            ExecError::SpawnError(std::io::Error::other(format!(
+                "failed to listen on {}: {}",
+                self.config.listen_addr, e
+            )))
         })?;
 
         info!("Server listening on {}", self.config.listen_addr);
@@ -105,13 +113,15 @@ impl CacheServer {
                 Ok(bytes) => bytes,
                 Err(e) => {
                     error!("Failed to serialize response: {}", e);
-                    let error_response = Response::error(ErrorCode::ServerError, "serialization failed");
+                    let error_response =
+                        Response::error(ErrorCode::ServerError, "serialization failed");
                     serialize_response(&error_response).unwrap_or_default()
                 }
             };
 
             let bytes_out = response_bytes.len();
-            self.stats.record_request(!response.is_error(), bytes_in, bytes_out);
+            self.stats
+                .record_request(!response.is_error(), bytes_in, bytes_out);
 
             let reply = nng::Message::from(response_bytes.as_slice());
             if let Err(e) = socket.send(reply) {
@@ -160,9 +170,12 @@ impl CacheServer {
             Request::Exists { keys } => self.handle_exists(&keys),
             Request::Lookup { key } => self.handle_lookup(&key),
             Request::PushEntry { key, entry } => self.handle_push_entry(&key, entry),
-            Request::PushBlob { hash, data, offset, total } => {
-                self.handle_push_blob(&hash, &data, offset, total)
-            }
+            Request::PushBlob {
+                hash,
+                data,
+                offset,
+                total,
+            } => self.handle_push_blob(&hash, &data, offset, total),
             Request::PushBlobComplete { hash, checksum } => {
                 self.handle_push_blob_complete(&hash, &checksum)
             }

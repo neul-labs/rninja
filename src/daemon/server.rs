@@ -81,8 +81,8 @@ impl DaemonServer {
         }
 
         // Create and bind socket
-        let socket = nng::Socket::new(nng::Protocol::Rep0)
-            .context("Failed to create NNG socket")?;
+        let socket =
+            nng::Socket::new(nng::Protocol::Rep0).context("Failed to create NNG socket")?;
 
         let url = format!("ipc://{}", self.socket_path.display());
         socket.listen(&url).context("Failed to bind to socket")?;
@@ -115,7 +115,9 @@ impl DaemonServer {
             }
 
             // Try to receive a request with timeout
-            if let Err(e) = socket.set_opt::<nng::options::RecvTimeout>(Some(Duration::from_millis(100))) {
+            if let Err(e) =
+                socket.set_opt::<nng::options::RecvTimeout>(Some(Duration::from_millis(100)))
+            {
                 tracing::warn!("Failed to set receive timeout: {}", e);
             }
 
@@ -176,9 +178,7 @@ impl DaemonServer {
             DaemonRequest::Ping => self.handle_ping(),
             DaemonRequest::Status => self.handle_status(),
             DaemonRequest::Shutdown => self.handle_shutdown(),
-            DaemonRequest::InvalidateCache { build_dir } => {
-                self.handle_invalidate_cache(build_dir)
-            }
+            DaemonRequest::InvalidateCache { build_dir } => self.handle_invalidate_cache(build_dir),
             DaemonRequest::Build(req) => self.handle_build(req),
             DaemonRequest::Query(req) => self.handle_query(req),
             DaemonRequest::CancelBuild { session_id } => self.handle_cancel_build(session_id),
@@ -233,10 +233,10 @@ impl DaemonServer {
         };
 
         // Get or parse manifest
-        let cached = match self.state.get_or_parse_manifest(
-            &request.build_dir,
-            &request.build_file,
-        ) {
+        let cached = match self
+            .state
+            .get_or_parse_manifest(&request.build_dir, &request.build_file)
+        {
             Ok(c) => c,
             Err(e) => {
                 session.build_finished(false);
@@ -257,7 +257,12 @@ impl DaemonServer {
 
         // Determine targets
         let targets: Vec<&str> = if request.targets.is_empty() {
-            cached.manifest.defaults.iter().map(|s| s.as_str()).collect()
+            cached
+                .manifest
+                .defaults
+                .iter()
+                .map(|s| s.as_str())
+                .collect()
         } else {
             request.targets.iter().map(|s| s.as_str()).collect()
         };
@@ -310,28 +315,23 @@ impl DaemonServer {
     /// Handle query request
     fn handle_query(&self, request: QueryRequest) -> DaemonResponse {
         match request {
-            QueryRequest::Targets { build_dir } => {
-                self.with_manifest(&build_dir, |cached| {
-                    let targets: Vec<String> = cached
-                        .graph
-                        .outputs()
-                        .into_iter()
-                        .map(|s| s.to_string())
-                        .collect();
-                    DaemonResponse::QueryResult {
-                        data: targets.join("\n"),
-                    }
-                })
-            }
-            QueryRequest::Rules { build_dir } => {
-                self.with_manifest(&build_dir, |cached| {
-                    let rules: Vec<String> =
-                        cached.manifest.rules.keys().cloned().collect();
-                    DaemonResponse::QueryResult {
-                        data: rules.join("\n"),
-                    }
-                })
-            }
+            QueryRequest::Targets { build_dir } => self.with_manifest(&build_dir, |cached| {
+                let targets: Vec<String> = cached
+                    .graph
+                    .outputs()
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect();
+                DaemonResponse::QueryResult {
+                    data: targets.join("\n"),
+                }
+            }),
+            QueryRequest::Rules { build_dir } => self.with_manifest(&build_dir, |cached| {
+                let rules: Vec<String> = cached.manifest.rules.keys().cloned().collect();
+                DaemonResponse::QueryResult {
+                    data: rules.join("\n"),
+                }
+            }),
             QueryRequest::Commands { build_dir, targets } => {
                 self.with_manifest(&build_dir, |cached| {
                     let mut commands = Vec::new();
@@ -347,20 +347,18 @@ impl DaemonServer {
                     }
                 })
             }
-            QueryRequest::Deps { build_dir, target } => {
-                self.with_manifest(&build_dir, |cached| {
-                    if let Some(inputs) = cached.graph.inputs_for(&target) {
-                        DaemonResponse::QueryResult {
-                            data: inputs.join("\n"),
-                        }
-                    } else {
-                        DaemonResponse::Error {
-                            code: ErrorCode::TargetNotFound,
-                            message: format!("Target not found: {}", target),
-                        }
+            QueryRequest::Deps { build_dir, target } => self.with_manifest(&build_dir, |cached| {
+                if let Some(inputs) = cached.graph.inputs_for(&target) {
+                    DaemonResponse::QueryResult {
+                        data: inputs.join("\n"),
                     }
-                })
-            }
+                } else {
+                    DaemonResponse::Error {
+                        code: ErrorCode::TargetNotFound,
+                        message: format!("Target not found: {}", target),
+                    }
+                }
+            }),
             QueryRequest::Inputs { build_dir, target } => {
                 self.with_manifest(&build_dir, |cached| {
                     match cached.graph.topological_order(&[&target]) {
@@ -384,39 +382,34 @@ impl DaemonServer {
                     }
                 })
             }
-            QueryRequest::CompDb { build_dir } => {
-                self.with_manifest(&build_dir, |cached| {
-                    let mut entries = Vec::new();
-                    for build in &cached.manifest.builds {
-                        if let Some(rule) = cached.manifest.rules.get(&build.rule) {
-                            if let Some(cmd) = &rule.command {
-                                for input in &build.inputs {
-                                    if input.ends_with(".c")
-                                        || input.ends_with(".cc")
-                                        || input.ends_with(".cpp")
-                                    {
-                                        entries.push(serde_json::json!({
-                                            "directory": build_dir.to_string_lossy(),
-                                            "command": cmd,
-                                            "file": input,
-                                        }));
-                                    }
+            QueryRequest::CompDb { build_dir } => self.with_manifest(&build_dir, |cached| {
+                let mut entries = Vec::new();
+                for build in &cached.manifest.builds {
+                    if let Some(rule) = cached.manifest.rules.get(&build.rule) {
+                        if let Some(cmd) = &rule.command {
+                            for input in &build.inputs {
+                                if input.ends_with(".c")
+                                    || input.ends_with(".cc")
+                                    || input.ends_with(".cpp")
+                                {
+                                    entries.push(serde_json::json!({
+                                        "directory": build_dir.to_string_lossy(),
+                                        "command": cmd,
+                                        "file": input,
+                                    }));
                                 }
                             }
                         }
                     }
-                    match serde_json::to_string_pretty(&entries) {
-                        Ok(data) => DaemonResponse::QueryResult { data },
-                        Err(e) => DaemonResponse::Error {
-                            code: ErrorCode::ParseError,
-                            message: format!(
-                                "Failed to serialize compilation database: {}",
-                                e
-                            ),
-                        },
-                    }
-                })
-            }
+                }
+                match serde_json::to_string_pretty(&entries) {
+                    Ok(data) => DaemonResponse::QueryResult { data },
+                    Err(e) => DaemonResponse::Error {
+                        code: ErrorCode::ParseError,
+                        message: format!("Failed to serialize compilation database: {}", e),
+                    },
+                }
+            }),
         }
     }
 

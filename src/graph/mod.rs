@@ -37,7 +37,11 @@ impl Graph {
             nodes: HashMap::new(),
             rules: manifest.rules.clone(),
             variables: manifest.variables.clone(),
-            pools: manifest.pools.iter().map(|(k, v)| (k.clone(), v.depth)).collect(),
+            pools: manifest
+                .pools
+                .iter()
+                .map(|(k, v)| (k.clone(), v.depth))
+                .collect(),
         };
 
         // First pass: create nodes for all build outputs
@@ -73,12 +77,12 @@ impl Graph {
                     ),
                     pool: rule.and_then(|r| r.pool.clone()),
                     generator: rule.map(|r| r.generator).unwrap_or(false),
-                    rspfile: rule.and_then(|r| r.rspfile.as_deref()).map(|s| {
-                        graph.expand_var(s, build, rule)
-                    }),
-                    rspfile_content: rule.and_then(|r| r.rspfile_content.as_deref()).map(|s| {
-                        graph.expand_var(s, build, rule)
-                    }),
+                    rspfile: rule
+                        .and_then(|r| r.rspfile.as_deref())
+                        .map(|s| graph.expand_var(s, build, rule)),
+                    rspfile_content: rule
+                        .and_then(|r| r.rspfile_content.as_deref())
+                        .map(|s| graph.expand_var(s, build, rule)),
                 };
 
                 graph.nodes.insert(output.to_string(), node);
@@ -214,7 +218,12 @@ impl Graph {
             if let Some(node) = self.nodes.get(path) {
                 let node_id = escape_dot_id(path);
                 let shape = if node.is_source { "ellipse" } else { "box" };
-                lines.push(format!("  {} [shape={}, label=\"{}\"];", node_id, shape, escape_dot_label(path)));
+                lines.push(format!(
+                    "  {} [shape={}, label=\"{}\"];",
+                    node_id,
+                    shape,
+                    escape_dot_label(path)
+                ));
 
                 for dep in &node.deps {
                     let dep_id = escape_dot_id(dep);
@@ -259,9 +268,12 @@ impl Graph {
             });
         }
 
-        let node = self.nodes.get(target).ok_or_else(|| GraphError::UnknownTarget {
-            target: target.to_string(),
-        })?;
+        let node = self
+            .nodes
+            .get(target)
+            .ok_or_else(|| GraphError::UnknownTarget {
+                target: target.to_string(),
+            })?;
 
         in_stack.insert(target.to_string());
 

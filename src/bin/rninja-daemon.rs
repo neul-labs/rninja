@@ -42,7 +42,11 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // Set up logging
-    let level = if args.verbose { Level::DEBUG } else { Level::INFO };
+    let level = if args.verbose {
+        Level::DEBUG
+    } else {
+        Level::INFO
+    };
     let subscriber = FmtSubscriber::builder()
         .with_max_level(level)
         .with_target(false)

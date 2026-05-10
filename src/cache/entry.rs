@@ -29,7 +29,8 @@ impl CacheEntry {
         data.extend_from_slice(cmd_bytes);
 
         // Created timestamp
-        let duration = self.created
+        let duration = self
+            .created
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default();
         data.extend_from_slice(&duration.as_secs().to_le_bytes());
@@ -79,7 +80,8 @@ impl CacheEntry {
         if pos + 4 > data.len() {
             return Err(err());
         }
-        let cmd_len = u32::from_le_bytes(data[pos..pos + 4].try_into().map_err(|_| err())?) as usize;
+        let cmd_len =
+            u32::from_le_bytes(data[pos..pos + 4].try_into().map_err(|_| err())?) as usize;
         pos += 4;
         if pos + cmd_len > data.len() {
             return Err(err());
@@ -118,7 +120,8 @@ impl CacheEntry {
             if pos + path_len > data.len() {
                 return Err(err());
             }
-            let path = PathBuf::from(String::from_utf8_lossy(&data[pos..pos + path_len]).to_string());
+            let path =
+                PathBuf::from(String::from_utf8_lossy(&data[pos..pos + path_len]).to_string());
             pos += path_len;
 
             // Hash

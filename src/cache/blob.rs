@@ -22,9 +22,8 @@ impl BlobStore {
     /// Returns `CacheError::CacheDir` if the directory cannot be created.
     /// Returns `CacheError::BlobIo` for permission or I/O errors.
     pub fn open(path: &Path) -> Result<Self, CacheError> {
-        fs::create_dir_all(path).map_err(|e| {
-            CacheError::CacheDir(format!("failed to create blob directory: {}", e))
-        })?;
+        fs::create_dir_all(path)
+            .map_err(|e| CacheError::CacheDir(format!("failed to create blob directory: {}", e)))?;
         Ok(Self {
             root: path.to_path_buf(),
         })

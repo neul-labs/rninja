@@ -11,7 +11,10 @@ pub fn export_prometheus(snapshot: &MetricsSnapshot) -> String {
     // Target metrics
     output.push_str("# HELP rninja_targets_total Total number of targets\n");
     output.push_str("# TYPE rninja_targets_total gauge\n");
-    output.push_str(&format!("rninja_targets_total {}\n", snapshot.targets_total));
+    output.push_str(&format!(
+        "rninja_targets_total {}\n",
+        snapshot.targets_total
+    ));
 
     output.push_str("# HELP rninja_targets_built Number of targets built\n");
     output.push_str("# TYPE rninja_targets_built counter\n");

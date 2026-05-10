@@ -48,7 +48,10 @@ pub fn run_cache_health(_verbose: bool, json: bool) -> Result<HealthReport, Exec
     ];
 
     // Determine overall status
-    let overall_status = if checks.iter().any(|c| !c.passed && c.severity == Severity::Critical) {
+    let overall_status = if checks
+        .iter()
+        .any(|c| !c.passed && c.severity == Severity::Critical)
+    {
         HealthStatus::Critical
     } else if checks.iter().any(|c| !c.passed) {
         HealthStatus::Degraded
@@ -66,8 +69,10 @@ pub fn run_cache_health(_verbose: bool, json: bool) -> Result<HealthReport, Exec
             Ok(s) => println!("{}", s),
             Err(e) => {
                 eprintln!("Error serializing health report: {}", e);
-                return Err(ExecError::SpawnError(std::io::Error::other(format!("serialization error: {}", e),
-                )));
+                return Err(ExecError::SpawnError(std::io::Error::other(format!(
+                    "serialization error: {}",
+                    e
+                ))));
             }
         }
     } else {
@@ -275,7 +280,10 @@ fn print_human_readable(report: &HealthReport) {
             Severity::Warning => " (warning)",
             Severity::Critical => " (critical)",
         };
-        println!("  [{}] {}: {}{}", status, check.name, check.message, severity_str);
+        println!(
+            "  [{}] {}: {}{}",
+            status, check.name, check.message, severity_str
+        );
     }
 
     println!();

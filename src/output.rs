@@ -62,9 +62,7 @@ pub enum JsonEvent<'a> {
     /// No work needed
     NoWorkToDo,
     /// An error occurred
-    Error {
-        message: &'a str,
-    },
+    Error { message: &'a str },
 }
 
 impl<'a> JsonEvent<'a> {
@@ -120,7 +118,12 @@ impl ProgressReporter {
         Self::with_mode(total, verbose, OutputMode::Human, 1)
     }
 
-    pub fn with_mode(total: usize, verbose: bool, output_mode: OutputMode, parallelism: usize) -> Self {
+    pub fn with_mode(
+        total: usize,
+        verbose: bool,
+        output_mode: OutputMode,
+        parallelism: usize,
+    ) -> Self {
         let is_tty = std::io::stdout().is_terminal();
         Self {
             term: Term::stderr(),
@@ -160,7 +163,8 @@ impl ProgressReporter {
                 JsonEvent::BuildStarted {
                     total_targets: self.total,
                     parallelism: self.parallelism,
-                }.emit();
+                }
+                .emit();
             }
         }
     }
@@ -171,7 +175,13 @@ impl ProgressReporter {
     }
 
     /// Report build completed with cache statistics
-    pub fn finish_with_cache(&self, success: bool, duration_ms: u64, cache_hits: Option<usize>, cache_misses: Option<usize>) {
+    pub fn finish_with_cache(
+        &self,
+        success: bool,
+        duration_ms: u64,
+        cache_hits: Option<usize>,
+        cache_misses: Option<usize>,
+    ) {
         let built = self.built.load(Ordering::SeqCst);
 
         match self.output_mode {
@@ -190,10 +200,7 @@ impl ProgressReporter {
                     }
                 } else {
                     let style = &self.styles.error;
-                    println!(
-                        "{} Build failed",
-                        style.apply_to("✗")
-                    );
+                    println!("{} Build failed", style.apply_to("✗"));
                 }
             }
             OutputMode::Json => {
@@ -207,7 +214,8 @@ impl ProgressReporter {
                         duration_ms,
                         cache_hits,
                         cache_misses,
-                    }.emit();
+                    }
+                    .emit();
                 }
             }
         }
@@ -267,7 +275,8 @@ impl ProgressHandle {
                     index: current,
                     total: self.total,
                     command: if self.verbose { command } else { None },
-                }.emit();
+                }
+                .emit();
             }
         }
     }
@@ -301,7 +310,8 @@ impl ProgressHandle {
                     total: self.total,
                     success,
                     error,
-                }.emit();
+                }
+                .emit();
             }
         }
     }
@@ -329,7 +339,8 @@ impl ProgressHandle {
                     target,
                     index: current,
                     total: self.total,
-                }.emit();
+                }
+                .emit();
             }
         }
     }

@@ -17,7 +17,12 @@ pub struct Cli {
     pub jobs: Option<usize>,
 
     /// Keep going until N jobs fail (0 means infinity) [default: 1]
-    #[arg(short = 'k', long = "keep-going", value_name = "N", default_value = "1")]
+    #[arg(
+        short = 'k',
+        long = "keep-going",
+        value_name = "N",
+        default_value = "1"
+    )]
     pub keep_going: usize,
 
     /// Do not start new jobs if the load average is greater than N
