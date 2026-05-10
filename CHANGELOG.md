@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-05-07
+
+### Fixed
+
+- **CI formatting check**: ran `cargo fmt --all` to fix formatting across the entire codebase.
+- **CI doc warnings**: fixed bare URL rustdoc warning in `src/trace.rs`.
+- **README badges**: added npm, PyPI, and CI badges.
+
 ## [0.1.1] - 2026-05-07
 
 ### Fixed

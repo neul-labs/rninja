@@ -1,6 +1,6 @@
 {
   "name": "rninja-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A drop-in replacement for Ninja build system with caching and improved scheduling",
   "main": "bin/rninja",
   "bin": {
