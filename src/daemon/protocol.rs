@@ -292,12 +292,15 @@ fn get_effective_uid() -> u32 {
 #[cfg(not(unix))]
 fn get_effective_uid() -> u32 {
     // On non-Unix platforms, use a hash of the temp dir as a surrogate
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let temp_dir = std::env::temp_dir().to_string_lossy();
-    let mut hasher = DefaultHasher::new();
-    temp_dir.hash(&mut hasher);
-    hasher.finish() as u32
+    static RES: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *RES.get_or_init(|| {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let temp_dir = std::env::temp_dir();
+        let mut hasher = DefaultHasher::new();
+        temp_dir.hash(&mut hasher);
+        hasher.finish() as u32
+    })
 }
 
 /// Generate a unique session ID

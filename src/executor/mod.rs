@@ -812,9 +812,12 @@ impl Executor {
         tokio::fs::write(rsp, content).await?;
     }
 
+    let shell = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
+    let shell_arg = if cfg!(target_os = "windows") { "/C" } else { "-c" };
+
     // Execute the command
-    let output = Command::new("sh")
-        .arg("-c")
+    let output = Command::new(shell)
+        .arg(shell_arg)
         .arg(command)
         .output()
         .await?;
