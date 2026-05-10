@@ -1,5 +1,42 @@
 /target
+Cargo.lock
+
+# Node / npm
+node_modules/
+package-lock.json
+npm-debug.log*
+packages/npm/.rninja-binaries/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# MkDocs / documentation site
+site/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+*.env
+.env.local
+
+# Snap artifacts (legacy)
+*.snap
+
+# Misc
 memista.*
 *.usearch
-.vscode
-*.env
