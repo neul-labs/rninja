@@ -20,13 +20,13 @@ brew install rninja
 ### NPM
 
 ```bash
-npm install -g rninja
+npm install -g rninja-cli
 ```
 
 ### PyPI
 
 ```bash
-pip install rninja
+pip install rninja-cli
 ```
 
 ### Cargo

@@ -16,7 +16,7 @@ except ImportError:
 
 GITHUB_OWNER = "neul-labs"
 REPO = "rninja"
-VERSION = get_version("rninja")
+VERSION = get_version("rninja-cli")
 
 ARCH_MAP = {
     "x86_64": "x86_64",

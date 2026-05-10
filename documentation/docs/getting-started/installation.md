@@ -39,7 +39,7 @@ This installs the following binaries:
 You can install rninja globally via npm:
 
 ```bash
-npm install -g rninja
+npm install -g rninja-cli
 ```
 
 The npm package downloads the correct prebuilt binary for your platform automatically.
@@ -49,7 +49,7 @@ The npm package downloads the correct prebuilt binary for your platform automati
 You can install rninja via pip:
 
 ```bash
-pip install rninja
+pip install rninja-cli
 ```
 
 The PyPI package downloads the correct prebuilt binary for your platform on first use.

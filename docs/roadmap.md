@@ -87,8 +87,8 @@ rninja's path to a fully featured, trustworthy drop-in replacement spans multipl
 
 - ✅ Pre-built binaries for macOS (x86_64, aarch64) and Linux (x86_64, aarch64)
 - ✅ Homebrew formula published to `neul-labs/homebrew-tap`
-- ✅ NPM wrapper package for `npm install -g rninja`
-- ✅ PyPI wrapper package for `pip install rninja`
+- ✅ NPM wrapper package for `npm install -g rninja-cli`
+- ✅ PyPI wrapper package for `pip install rninja-cli`
 
 ## Deliverables
 

@@ -10,7 +10,7 @@ A Rust-powered drop-in replacement for [Ninja](https://ninja-build.org/) with bu
 ## Installation
 
 ```bash
-pip install rninja
+pip install rninja-cli
 ```
 
 The package downloads the correct prebuilt binary for your platform on first use (macOS Intel/Apple Silicon, Linux x86_64/aarch64).
