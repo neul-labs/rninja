@@ -39,6 +39,7 @@ function Invoke-Quiet {
     $process.StartInfo.FileName = $FilePath
     $process.StartInfo.Arguments = Join-CommandArguments -Arguments $Arguments
     $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.WorkingDirectory = (Get-Location).ProviderPath
     $process.StartInfo.RedirectStandardOutput = $true
     $process.StartInfo.RedirectStandardError = $true
 
@@ -72,6 +73,7 @@ function Invoke-QuietWithTimeout {
     $process.StartInfo.FileName = $FilePath
     $process.StartInfo.Arguments = Join-CommandArguments -Arguments $Arguments
     $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.WorkingDirectory = (Get-Location).ProviderPath
     $process.StartInfo.RedirectStandardOutput = $true
     $process.StartInfo.RedirectStandardError = $true
 
@@ -94,6 +96,31 @@ function Invoke-QuietWithTimeout {
     return $process.ExitCode
 }
 
+function Find-WindowsCCompiler {
+    $searchDirs = @(
+        "C:\msys64\ucrt64\bin",
+        "C:\msys64\clang64",
+        "C:\msys64\clang64\bin",
+        "C:\msys64\mingw64\bin",
+        "C:\msys64\mingw32\bin"
+    )
+
+    foreach ($compilerName in @("clang.exe", "gcc.exe")) {
+        foreach ($dir in $searchDirs) {
+            $compilerPath = Join-Path $dir $compilerName
+            if (Test-Path -LiteralPath $compilerPath -PathType Leaf) {
+                return @{
+                    Path = $compilerPath
+                    Directory = $dir
+                    Name = $compilerName
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
 $scriptDir = $PSScriptRoot
 $projectRoot = Split-Path -Parent (Split-Path -Parent $scriptDir)
 
@@ -101,6 +128,7 @@ $isWindowsPlatform = $env:OS -eq "Windows_NT"
 $rninjaName = if ($isWindowsPlatform) { "rninja.exe" } else { "rninja" }
 $rninja = Join-Path $projectRoot "target/release/$rninjaName"
 $ninja = "ninja"
+$cmakeConfigureArgs = @("-G", "Ninja", "..")
 
 Write-Status "=== CMake Generator Compatibility Test ===" Blue
 Write-Host ""
@@ -113,6 +141,18 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
 if (-not (Get-Command $ninja -ErrorAction SilentlyContinue)) {
     Write-Status "SKIP: ninja not found" Yellow
     exit 0
+}
+
+if ($isWindowsPlatform) {
+    $cCompiler = Find-WindowsCCompiler
+    if (-not $cCompiler) {
+        Write-Status "SKIP: no clang.exe or gcc.exe found in supported MSYS2 directories" Yellow
+        exit 0
+    }
+
+    $env:Path = "$($cCompiler.Directory);$env:Path"
+    $cmakeConfigureArgs += "-DCMAKE_C_COMPILER=$($cCompiler.Path)"
+    Write-Status "Using C compiler: $($cCompiler.Path)" Yellow
 }
 
 if (-not (Test-Path -LiteralPath $rninja -PathType Leaf)) {
@@ -153,11 +193,11 @@ int main() { printf("%d\n", add(1, 2)); return 0; }
     New-Item -ItemType Directory -Path $buildDir | Out-Null
     Push-Location $buildDir
 
-    eza --tree ..
+    tree .. /F | Write-Host
 
     try {
         Write-Status "Running cmake -G Ninja..." Yellow
-        & cmake -G Ninja ..
+        & cmake @cmakeConfigureArgs
         $cmakeResult = $LASTEXITCODE
         if ($cmakeResult -ne 0) {
             Write-Status "FAIL: cmake failed with exit code $cmakeResult" Red
