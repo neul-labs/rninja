@@ -153,9 +153,12 @@ int main() { printf("%d\n", add(1, 2)); return 0; }
     New-Item -ItemType Directory -Path $buildDir | Out-Null
     Push-Location $buildDir
 
+    eza --tree ..
+
     try {
         Write-Status "Running cmake -G Ninja..." Yellow
-        $cmakeResult = Invoke-Quiet -FilePath "cmake" -Arguments @("-G", "Ninja", "..")
+        & cmake -G Ninja ..
+        $cmakeResult = $LASTEXITCODE
         if ($cmakeResult -ne 0) {
             Write-Status "FAIL: cmake failed with exit code $cmakeResult" Red
             exit $cmakeResult
