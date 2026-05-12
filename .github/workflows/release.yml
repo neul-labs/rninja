@@ -160,10 +160,11 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      # Node 24.x bundles npm >= 11.5.1, which supports OIDC trusted publishing
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Verify npm version
@@ -180,9 +181,12 @@ jobs:
           cd packages/npm
           sed -i "s/\"version\": \".*\"/\"version\": \"${{ steps.version.outputs.VERSION }}\"/" package.json
 
-      - name: Publish to NPM
+      # Unset NODE_AUTH_TOKEN so OIDC takes precedence (setup-node may set a placeholder)
+      - name: Publish to NPM with OIDC provenance
         working-directory: packages/npm
-        run: npm publish --provenance --access public
+        run: |
+          unset NODE_AUTH_TOKEN
+          npm publish --provenance
 
   update-homebrew-tap:
     name: Update Homebrew Tap
