@@ -10,13 +10,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+The canonical changelog lives in
+[`CHANGELOG.md`](https://github.com/neul-labs/rninja/blob/main/CHANGELOG.md)
+at the repository root - this page mirrors it for navigability.
+
+## [0.1.3] - 2026-05-10
+
+### Fixed
+
+- **npm OIDC publishing**: switched to Node 24.x (npm >= 11.5.1) for native OIDC trusted publishing support.
+- **Homebrew formula update**: fixed SHA256 substitution regex in release workflow.
+- **Release workflow**: removed invalid `--access public` flag for unscoped npm package.
+
+## [0.1.2] - 2026-05-07
+
+### Fixed
+
+- **CI formatting check**: ran `cargo fmt --all` to fix formatting across the entire codebase.
+- **CI doc warnings**: fixed bare URL rustdoc warning in `src/trace.rs`.
+- **README badges**: added npm, PyPI, and CI badges.
+
 ## [0.1.1] - 2026-05-07
 
 ### Fixed
 
 - **Cache restore now works**: cache hits actually restore output files from blob storage instead of being a no-op stub.
 - **Environment variables in cache keys**: `CC`, `CXX`, `CFLAGS`, `LDFLAGS`, etc. are now included in action keys, preventing stale cache hits after compiler flag changes.
-- **State machine enforcement** for `NodeState`, `SessionState`, `ConnectionState`, and `WatcherState` — invalid transitions are now rejected at compile time or logged at runtime.
+- **State machine enforcement** for `NodeState`, `SessionState`, `ConnectionState`, and `WatcherState` - invalid transitions are now rejected at compile time or logged at runtime.
 - **Removed `panic!` in production path** in cache server handler.
 - **`BuildLog::save` now resets the dirty flag** after successful writes.
 - **Blocking NNG calls moved off the async runtime** via `tokio::task::spawn_blocking`.
@@ -53,5 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 2-5x faster warm incremental builds with caching
 - 1.3-2x faster cold builds with improved parallelism
 
+[0.1.3]: https://github.com/neul-labs/rninja/releases/tag/v0.1.3
+[0.1.2]: https://github.com/neul-labs/rninja/releases/tag/v0.1.2
 [0.1.1]: https://github.com/neul-labs/rninja/releases/tag/v0.1.1
 [0.1.0]: https://github.com/neul-labs/rninja/releases/tag/v0.1.0

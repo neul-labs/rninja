@@ -2,7 +2,7 @@
 # Material for MkDocs theme
 
 site_name: rninja
-site_url: https://docs.neullabs.com/rninja
+site_url: https://rninja.docs.neullabs.com/
 site_author: Neul Labs
 site_description: >-
   High-performance drop-in replacement for Ninja build system with
@@ -13,6 +13,9 @@ repo_url: https://github.com/neul-labs/rninja
 edit_uri: edit/main/documentation/docs/
 
 copyright: Copyright &copy; 2024 Neul Labs
+
+not_in_nav: |
+  /includes/abbreviations.md
 
 theme:
   name: material
