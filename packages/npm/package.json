@@ -25,8 +25,9 @@
     "compiler",
     "build-tool"
   ],
-  "author": "Dipankar Sarkar",
+  "author": "Neul Labs <contact@neullabs.com>",
   "license": "MIT",
+  "homepage": "https://rninja.neullabs.com",
   "os": [
     "darwin",
     "linux",

@@ -7,9 +7,11 @@
 [![Documentation](https://img.shields.io/badge/docs-neullabs.com-blue)](https://docs.neullabs.com/rninja)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Build faster. Cache smarter. Drop-in ready.**
+**rninja is a drop-in replacement for [Ninja](https://ninja-build.org/) with built-in caching — build faster, cache smarter, change nothing.**
 
-A Rust-powered drop-in replacement for [Ninja](https://ninja-build.org/) with built-in caching and modern scheduling. Cut your build times without changing your build files.
+**[Website](https://rninja.neullabs.com)** · **[Documentation](https://docs.neullabs.com/rninja)** · **[GitHub](https://github.com/neul-labs/rninja)**
+
+A Rust-powered build tool with modern scheduling that reads your existing `.ninja` files and cuts build times without changing a line of your build configuration.
 
 ## Installation
 
@@ -36,8 +38,6 @@ pip install rninja-cli
 
 ```bash
 cargo install rninja
-```
-
 ```
 
 ### From GitHub Releases
@@ -160,10 +160,24 @@ Contributions welcome! Please see our [GitHub repository](https://github.com/neu
 - [Drop-in compatibility guide](docs/dropin.md)
 - [Roadmap](docs/roadmap.md)
 
+## Part of the Neul Labs toolchain
+
+Explore the rest of the Neul Labs developer tools:
+
+| Project | Description |
+| --- | --- |
+| [rjest](https://github.com/neul-labs/rjest) | A blazing-fast, Jest-compatible test runner — 100x faster warm runs. |
+| [rpytest](https://github.com/neul-labs/rpytest) | Run your pytest suite faster. Change nothing. |
+| [gity](https://github.com/neul-labs/gity) | Make large Git repositories feel instant. |
+| [stkd](https://github.com/neul-labs/stkd) | Stacked diffs for GitHub and GitLab. |
+| [grite](https://github.com/neul-labs/grite) | The issue tracker that lives in your repo. Built for AI agents. |
+
+Learn more at [neullabs.com](https://www.neullabs.com).
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-Built with Rust by [Neul Labs](https://github.com/neul-labs)
+Built with Rust by [Neul Labs](https://www.neullabs.com)

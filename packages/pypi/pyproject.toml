@@ -9,8 +9,9 @@ description = "A drop-in replacement for Ninja build system with caching and imp
 readme = "README.md"
 license = "MIT"
 authors = [
-    {name = "Dipankar Sarkar"},
+    {name = "Neul Labs", email = "contact@neullabs.com"},
 ]
+keywords = ["build", "ninja", "cache", "build-tool", "compiler"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -31,5 +32,6 @@ rninja-cached = "rninja.cli:cached_main"
 rninja-daemon = "rninja.cli:daemon_main"
 
 [project.urls]
-Homepage = "https://github.com/neul-labs/rninja"
+Homepage = "https://rninja.neullabs.com"
+Documentation = "https://docs.neullabs.com/rninja"
 Repository = "https://github.com/neul-labs/rninja"
