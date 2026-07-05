@@ -46,8 +46,8 @@ Ready to code? Follow the process below.
 
 ### 1. Find an Issue
 
-- Check [good first issues](https://github.com/anthropics/rninja/labels/good%20first%20issue)
-- Look for [help wanted](https://github.com/anthropics/rninja/labels/help%20wanted)
+- Check [good first issues](https://github.com/neul-labs/rninja/labels/good%20first%20issue)
+- Look for [help wanted](https://github.com/neul-labs/rninja/labels/help%20wanted)
 - Or propose your own in an issue
 
 ### 2. Fork and Clone
@@ -56,7 +56,7 @@ Ready to code? Follow the process below.
 # Fork on GitHub, then:
 git clone https://github.com/YOUR-USERNAME/rninja
 cd rninja
-git remote add upstream https://github.com/anthropics/rninja
+git remote add upstream https://github.com/neul-labs/rninja
 ```
 
 ### 3. Create Branch

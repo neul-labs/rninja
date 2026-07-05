@@ -28,7 +28,7 @@ Set up your environment for rninja development.
 
 ```bash
 # Clone repository
-git clone https://github.com/anthropics/rninja
+git clone https://github.com/neul-labs/rninja
 cd rninja
 
 # Build
@@ -64,7 +64,7 @@ git clone https://github.com/YOUR-USERNAME/rninja
 cd rninja
 
 # Add upstream
-git remote add upstream https://github.com/anthropics/rninja
+git remote add upstream https://github.com/neul-labs/rninja
 
 # Keep in sync
 git fetch upstream

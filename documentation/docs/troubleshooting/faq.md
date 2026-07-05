@@ -44,7 +44,7 @@ cargo install rninja
 brew install rninja
 
 # From source
-git clone https://github.com/anthropics/rninja
+git clone https://github.com/neul-labs/rninja
 cd rninja && cargo build --release
 ```
 
@@ -295,7 +295,7 @@ See [Contributing Guide](../contributing/guide.md):
 
 ### Where do I report bugs?
 
-GitHub Issues: https://github.com/anthropics/rninja/issues
+GitHub Issues: https://github.com/neul-labs/rninja/issues
 
 Include:
 - rninja version

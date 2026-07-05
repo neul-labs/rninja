@@ -341,7 +341,7 @@ If your issue isn't listed:
 1. Check [Debug Mode](debug-mode.md) for diagnostic tools
 2. Review [Diagnostics](diagnostics.md) for system checks
 3. Search [FAQ](faq.md)
-4. Open issue at [GitHub](https://github.com/anthropics/rninja/issues)
+4. Open issue at [GitHub](https://github.com/neul-labs/rninja/issues)
 
 Include:
 - rninja version (`rninja --version`)
